@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import CalendarPage from './CalendarPage'
 
 const STATUS_COLORS = { pending: '#f59e0b', approved: '#10b981', rejected: '#ef4444', returned: '#3b82f6' }
@@ -287,8 +286,14 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
         <svg className={`shrink-0 ${size === 'lg' ? 'w-5 h-5' : 'w-4 h-4'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       {open && (
-        <div ref={panelRef} className="absolute z-50 top-full mt-2 inset-x-0 mx-auto w-[640px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl overflow-hidden origin-top motion-safe:animate-scale-in">
-            <div className="p-6">
+        <>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 sm:hidden" onClick={() => { setOpen(false); setStep('start') }} />
+          <div ref={panelRef} className="
+            fixed inset-x-4 top-[10%] bottom-auto z-50 overflow-y-auto max-h-[80vh]
+            sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:mx-auto sm:w-[640px] sm:block sm:overflow-visible
+            bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in
+          ">
+            <div className="p-4 sm:p-6 w-full">
               <div className="flex items-center justify-between mb-4">
               <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
@@ -305,12 +310,13 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
               </button>
             </div>
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               {renderMonth(vy, vm)}
               {renderMonth(vy, vm + 1)}
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
   )
@@ -569,11 +575,7 @@ export default function PublicBooking() {
           </div>
           <span className="font-heading font-bold text-lg text-gray-900 dark:text-white">ยานพาหนะ</span>
         </div>
-        <Link to="/login"
-          className="h-10 px-5 inline-flex items-center gap-2 rounded-xl text-sm font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/50 hover:bg-brand-100 dark:hover:bg-brand-900/50 border border-brand-200 dark:border-brand-800 transition-all duration-200">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>
-          เข้าสู่ระบบ
-        </Link>
+
       </header>
 
       <main className="relative px-6 lg:px-12 pb-20">
@@ -581,11 +583,9 @@ export default function PublicBooking() {
           <div className="text-center pt-2 pb-6">
             <h1 className="text-4xl lg:text-5xl font-bold font-heading text-gray-900 dark:text-white mb-4">
               จองรถยนต์{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-500 to-brand-700">ยานพาหนะ</span>
+              <span className="text-brand-600">ยานพาหนะ</span>
             </h1>
-            <p className="text-lg text-gray-500 dark:text-gray-400 max-w-xl mx-auto">
-              กรอกข้อมูลเพื่อยืมรถยนต์สำหรับใช้งานภายในองค์กร
-            </p>
+
           </div>
 
           <div className="flex flex-wrap justify-center gap-2 mb-6">
@@ -763,7 +763,7 @@ export default function PublicBooking() {
           {showBookingModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if (!success) setShowBookingModal(false) }}>
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-            <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-6 animate-scale-in"
+            <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-scale-in"
               onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">จองรถ</h2>

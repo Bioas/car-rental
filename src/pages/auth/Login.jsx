@@ -38,7 +38,7 @@ export default function Login() {
             <p className="text-gray-500 dark:text-gray-400 mt-1">ระบบบริหารจัดการยานพาหนะ</p>
           </div>
 
-          <div className="card p-8">
+          <div className="card p-6 sm:p-8">
             <form onSubmit={handleLogin} className="space-y-5">
               <div>
                 <label className="label">อีเมล</label>

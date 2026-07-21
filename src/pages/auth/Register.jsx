@@ -40,7 +40,7 @@ export default function Register() {
             <p className="text-gray-500 dark:text-gray-400 mt-1">สร้างบัญชีเพื่อใช้งานระบบ</p>
           </div>
 
-          <div className="card p-8">
+          <div className="card p-6 sm:p-8">
             <form onSubmit={handleRegister} className="space-y-5">
               <div>
                 <label className="label">ชื่อ-นามสกุล</label>

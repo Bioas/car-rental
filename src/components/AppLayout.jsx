@@ -8,7 +8,7 @@ export function AppLayout() {
   const { sidebarOpen, toggleSidebar } = useApp()
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950 transition-colors duration-300">
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
         <Navbar />

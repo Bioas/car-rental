@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { statusLabel, badgeClass } from '../lib/constants'
 import { Spinner } from '../components/ui/spinner'
@@ -34,6 +34,16 @@ export default function Bookings() {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [cancelTarget, setCancelTarget] = useState(null)
+  const [menuOpenId, setMenuOpenId] = useState(null)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    function handler(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpenId(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   useEffect(() => {
     fetchBookings()
@@ -62,6 +72,21 @@ export default function Bookings() {
       })
       if (res.ok) {
         setCancelTarget(null)
+        await fetchBookings()
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function returnBooking(id) {
+    try {
+      const res = await fetch(`/api/bookings/${id}/return`, {
+        method: 'PUT',
+        headers: authHeaders()
+      })
+      if (res.ok) {
+        setMenuOpenId(null)
         await fetchBookings()
       }
     } catch (e) {
@@ -172,9 +197,8 @@ export default function Bookings() {
         <>
           {/* Mobile Card View */}
           <div className="sm:hidden space-y-3">
-            {filtered.map((b, i) => {
-              const canCancel = b.status === 'pending' || b.status === 'approved'
-              return (
+                      {filtered.map((b, i) => {
+                        return (
                 <div key={b.id} className="bg-white dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700/50 p-4 space-y-3 shadow-sm">
                   {/* Header: Number + Car Info */}
                   <div className="flex items-start justify-between">
@@ -215,12 +239,18 @@ export default function Bookings() {
                     )}
                   </div>
 
-                  {/* Action */}
-                  {canCancel && (
-                    <div className="pt-2 border-t border-gray-100 dark:border-gray-700/50">
-                      <button onClick={() => setCancelTarget(b)} className="w-full h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                  {/* Action Buttons (Mobile) */}
+                  {(b.status === 'pending' || b.status === 'approved') && (
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-700/50 flex gap-2">
+                      {b.status === 'approved' && (
+                        <button onClick={() => returnBooking(b.id)} className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-colors">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z"/></svg>
+                          คืนรถ
+                        </button>
+                      )}
+                      <button onClick={() => setCancelTarget(b)} className={`${b.status === 'approved' ? 'flex-1' : 'w-full'} h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors`}>
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                        ยกเลิกการจอง
+                        ยกเลิก
                       </button>
                     </div>
                   )}
@@ -246,7 +276,6 @@ export default function Bookings() {
                 </thead>
                 <tbody className="divide-y divide-gray-200/40 dark:divide-gray-700/40">
                   {filtered.map((b, i) => {
-                    const canCancel = b.status === 'pending' || b.status === 'approved'
                     return (
                       <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                         <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400">{filtered.length - i}</td>
@@ -270,11 +299,28 @@ export default function Bookings() {
                           <span className={badgeClass(b.status)}>{statusLabel(b.status)}</span>
                           {b.admin_notes && <span className="text-xs text-gray-400 block mt-0.5">{b.admin_notes}</span>}
                         </td>
-                        <td className="p-3 sm:p-4 text-right">
-                          {canCancel && (
-                            <button onClick={() => setCancelTarget(b)} className="btn-ghost btn-sm text-red-500 hover:text-red-700">
-                              ยกเลิก
-                            </button>
+                        <td className="p-3 sm:p-4 text-right relative">
+                          {(b.status === 'pending' || b.status === 'approved') && (
+                            <div ref={menuOpenId === b.id ? menuRef : null}>
+                              <button onClick={() => setMenuOpenId(menuOpenId === b.id ? null : b.id)}
+                                className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                              </button>
+                              {menuOpenId === b.id && (
+                                <div className="absolute right-4 top-full w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden z-10 motion-safe:animate-scale-in origin-top-right">
+                                  {b.status === 'approved' && (
+                                    <button onClick={() => { returnBooking(b.id) }} className="w-full px-4 py-3 text-sm text-left flex items-center gap-2.5 text-gray-700 dark:text-gray-300 hover:bg-brand-50 dark:hover:bg-brand-950/40 transition-colors">
+                                      <svg className="w-4 h-4 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z"/></svg>
+                                      คืนรถ
+                                    </button>
+                                  )}
+                                  <button onClick={() => { setCancelTarget(b); setMenuOpenId(null) }} className="w-full px-4 py-3 text-sm text-left flex items-center gap-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    ยกเลิก
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
