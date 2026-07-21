@@ -1,0 +1,253 @@
+import React, { useState, useRef, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
+import { PAGE_TITLES, timeAgo } from '../lib/constants'
+
+const NOTIF_TYPES = {
+  approved: { label: 'อนุมัติแล้ว', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+  rejected: { label: 'ปฏิเสธ', icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
+  booking_request: { label: 'คำขอจอง', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
+  cancelled: { label: 'ยกเลิก', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+}
+
+function getNotifType(type) {
+  return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
+}
+
+export function Navbar() {
+  const { sidebarOpen, toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, isAdmin, logout, authHeaders } = useApp()
+  const location = useLocation()
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [darkAnimating, setDarkAnimating] = useState(false)
+  const dropdownRef = useRef(null)
+  const notifDropdownRef = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false)
+      }
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target)) {
+        setShowNotifDropdown(false)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [])
+
+  function handleToggleDark() {
+    setDarkAnimating(true)
+    toggleDark()
+    setTimeout(() => setDarkAnimating(false), 400)
+  }
+
+  async function fetchNotifications() {
+    try {
+      const res = await fetch('/api/notifications', { headers: authHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data.notifications || [])
+        setNotificationCount(data.unread || 0)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  function unreadNotifCount() {
+    return notifications.filter(n => !n.is_read).length
+  }
+
+  async function markRead(id) {
+    try {
+      const res = await fetch(`/api/notifications/${id}/read`, {
+        method: 'PUT',
+        headers: authHeaders()
+      })
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
+        setNotificationCount(prev => Math.max(0, prev - 1))
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function readAll() {
+    try {
+      const res = await fetch('/api/notifications/read-all', {
+        method: 'PUT',
+        headers: authHeaders()
+      })
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })))
+        setNotificationCount(0)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const pageKey = location.pathname.replace(/^\/app/, '') || '/'
+  const pageTitle = PAGE_TITLES[pageKey] || 'ยานพาหนะ'
+  const initials = user?.name ? user.name.charAt(0).toUpperCase() : '?'
+
+  return (
+    <header className="h-20 border-b border-border-light dark:border-border-dark bg-card-light/80 dark:bg-card-dark/80 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
+      <div className="flex items-center gap-3">
+        <button onClick={toggleSidebar} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 lg:hidden transition-colors">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+        </button>
+        <h2 className="font-heading font-bold text-xl sm:text-2xl lg:text-3xl text-gray-900 dark:text-white">{pageTitle}</h2>
+      </div>
+
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Dark mode toggle */}
+        <button
+          onClick={handleToggleDark}
+          className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
+          title={darkMode ? 'โหมดสว่าง' : 'โหมดมืด'}
+        >
+          <div className={`transition-transform duration-300 ease-out ${darkAnimating ? 'rotate-180 scale-75' : 'rotate-0 scale-100'}`}>
+            {darkMode ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+            )}
+          </div>
+        </button>
+
+        {/* Notification bell + dropdown */}
+        <div className="relative" ref={notifDropdownRef}>
+          <button
+            onClick={() => {
+              if (!showNotifDropdown) fetchNotifications()
+              setShowNotifDropdown(!showNotifDropdown)
+            }}
+            className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+            {notificationCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 ring-2 ring-white dark:ring-card-dark">
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            )}
+          </button>
+
+          {showNotifDropdown && (
+            <div className="absolute right-0 mt-2 w-80 card p-0 shadow-xl border border-border-light dark:border-border-dark z-50 overflow-hidden animate-scale-in">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border-light dark:border-border-dark">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white font-heading">การแจ้งเตือน</h3>
+                  {unreadNotifCount() > 0 && (
+                    <span className="min-w-[18px] h-[18px] rounded-full bg-brand-600 text-white text-[10px] font-bold flex items-center justify-center px-1">
+                      {unreadNotifCount()}
+                    </span>
+                  )}
+                </div>
+                {unreadNotifCount() > 0 && (
+                  <button onClick={readAll} className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 font-medium transition-colors">
+                    อ่านทั้งหมด
+                  </button>
+                )}
+              </div>
+              <div className="max-h-72 overflow-y-auto scrollbar-thin">
+                {notifications.length > 0 ? (
+                  notifications.slice(0, 6).map(n => {
+                    const t = getNotifType(n.type)
+                    const isUnread = !n.is_read
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => isUnread && markRead(n.id)}
+                        className={`flex items-start gap-3 px-4 py-3 transition-colors
+                          ${isUnread
+                            ? 'cursor-pointer bg-brand-50/40 dark:bg-brand-900/10 hover:bg-brand-50/60 dark:hover:bg-brand-900/20'
+                            : 'cursor-default hover:bg-gray-50 dark:hover:bg-gray-800/30'
+                          }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${t.color}`}>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={t.icon} />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                              isUnread ? 'text-brand-500 dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
+                            }`}>{t.label}</span>
+                            <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500">{timeAgo(n.created_at)}</span>
+                          </div>
+                          <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">{n.message}</p>
+                        </div>
+                        {isUnread && (
+                          <div className="w-2 h-2 rounded-full bg-brand-500 dark:bg-brand-400 flex-shrink-0 mt-1.5" />
+                        )}
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-center py-10 text-gray-400">
+                    <svg className="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <p className="text-sm">ไม่มีการแจ้งเตือน</p>
+                  </div>
+                )}
+              </div>
+              <Link
+                to="/app/notifications"
+                onClick={() => setShowNotifDropdown(false)}
+                className="block text-center py-2.5 text-sm text-brand-600 dark:text-brand-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 border-t border-border-light dark:border-border-dark font-medium transition-colors"
+              >
+                ดูทั้งหมด
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* User avatar + dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/50 flex items-center justify-center ring-2 ring-brand-100/50 dark:ring-brand-900/30">
+              <span className="text-sm font-semibold text-brand-700 dark:text-brand-300 font-heading">{initials}</span>
+            </div>
+            <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">{user?.name?.split(' ')[0]}</span>
+          </button>
+
+          {showDropdown && (
+            <div className="absolute right-0 mt-2 w-56 card p-0 shadow-xl border border-border-light dark:border-border-dark z-50 overflow-hidden animate-scale-in">
+              <div className="px-4 py-3">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white font-heading">{user?.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{user?.email}</p>
+                {isAdmin && (
+                  <span className="inline-block mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
+                    ผู้ดูแลระบบ
+                  </span>
+                )}
+              </div>
+              <div className="border-t border-border-light dark:border-border-dark" />
+              <div className="p-1">
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  ออกจากระบบ
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  )
+}

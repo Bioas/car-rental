@@ -1,0 +1,133 @@
+import { Router } from 'express'
+import { all, get, insert, update } from '../db.js'
+import { authMiddleware } from '../middleware/auth.js'
+
+const router = Router()
+
+function addNotification(userId, message, type, relatedType, relatedId) {
+  insert('notifications', {
+    user_id: userId,
+    message,
+    type,
+    related_type: relatedType,
+    related_id: relatedId
+  })
+}
+
+router.get('/', authMiddleware, (req, res) => {
+  try {
+    let sql, params
+    if (req.user.role === 'admin') {
+      sql = `SELECT b.*, u.name as user_name, u.email as user_email,
+             c.license_plate, c.brand, c.model
+             FROM bookings b
+             JOIN users u ON b.user_id = u.id
+             JOIN cars c ON b.car_id = c.id
+             ORDER BY b.created_at DESC`
+      params = []
+    } else {
+      sql = `SELECT b.*, c.license_plate, c.brand, c.model
+             FROM bookings b
+             JOIN cars c ON b.car_id = c.id
+             WHERE b.user_id = ?
+             ORDER BY b.created_at DESC`
+      params = [req.user.id]
+    }
+    const bookings = all(sql, params)
+    res.json({ bookings })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/', authMiddleware, (req, res) => {
+  try {
+    const { car_id, start_date, end_date, purpose, user_id } = req.body
+    if (!car_id || !start_date || !end_date) {
+      return res.status(400).json({ error: 'กรุณาเลือกรถและวันที่' })
+    }
+
+    if (start_date > end_date) {
+      return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
+    }
+
+    const car = get('SELECT * FROM cars WHERE id = ?', [car_id])
+    if (!car) return res.status(404).json({ error: 'ไม่พบรถยนต์' })
+    if (car.status !== 'available') {
+      return res.status(400).json({ error: 'รถยนต์นี้ไม่พร้อมให้เช่า' })
+    }
+
+    const overlap = get(
+      `SELECT id FROM bookings WHERE car_id = ? AND status IN ('approved','pending')
+       AND start_date <= ? AND end_date >= ?`,
+      [car_id, end_date, start_date]
+    )
+    if (overlap) {
+      return res.status(409).json({ error: 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว' })
+    }
+
+    const finalUserId = (req.user.role === 'admin' && user_id) ? user_id : req.user.id
+    const borrower = get('SELECT id, name FROM users WHERE id = ?', [finalUserId])
+    if (!borrower) return res.status(400).json({ error: 'ไม่พบผู้ใช้ที่เลือก' })
+
+    const id = insert('bookings', {
+      user_id: finalUserId,
+      car_id,
+      start_date,
+      end_date,
+      purpose: purpose || '',
+      status: 'pending'
+    })
+
+    const booking = get(`SELECT b.*, c.license_plate, c.brand, c.model
+      FROM bookings b JOIN cars c ON b.car_id = c.id WHERE b.id = ?`, [id])
+
+    const admins = all('SELECT id FROM users WHERE role = ?', ['admin'])
+    admins.forEach(a => {
+      addNotification(a.id, `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`,
+        'booking_request', 'booking', id)
+    })
+
+    res.status(201).json({ booking })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.put('/:id/cancel', authMiddleware, (req, res) => {
+  try {
+    const booking = get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
+    if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'ไม่มีสิทธิ์ยกเลิก' })
+    }
+    if (booking.status !== 'pending' && booking.status !== 'approved') {
+      return res.status(400).json({ error: 'ไม่สามารถยกเลิกรายการนี้ได้' })
+    }
+
+    update('bookings', { status: 'rejected', updated_at: new Date().toISOString() }, 'id', booking.id)
+
+    addNotification(booking.user_id, `รายการจอง ${booking.id} ถูกยกเลิก`, 'cancelled', 'booking', booking.id)
+    res.json({ message: 'ยกเลิกสำเร็จ' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.get('/calendar', authMiddleware, (req, res) => {
+  try {
+    const bookings = all(
+      `SELECT b.*, u.name as user_name, c.license_plate, c.brand, c.model
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id
+       JOIN cars c ON b.car_id = c.id
+       WHERE b.status IN ('pending', 'approved', 'returned')
+       ORDER BY b.start_date ASC`
+    )
+    res.json({ bookings })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+export default router
