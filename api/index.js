@@ -1,20 +1,17 @@
-const { initDB } = require('./db.cjs')
-const app = require('./server.cjs')
+const express = require('express')
+const app = express()
 
-// Kick off DB init on cold start — subsequent warm requests reuse the same promise
-const ready = initDB().catch(err => {
-  console.error('DB init failed:', err)
-  throw err
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', ts: Date.now() })
 })
 
-module.exports = async (req, res) => {
-  try {
-    await ready
-    app(req, res)
-  } catch (err) {
-    console.error('Handler error:', err)
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' })
-    }
+// SPA fallback
+app.use((req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(require('path').join(__dirname, '..', 'dist', 'index.html'))
+  } else {
+    res.status(404).json({ error: 'Not found' })
   }
-}
+})
+
+module.exports = app
