@@ -166,6 +166,13 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
   const vy = viewDate.getFullYear()
   const vm = viewDate.getMonth()
 
+  const monthOptions = []
+  const scrollStartMonth = new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+  for (let i = 0; i < 36; i++) {
+    const d = new Date(scrollStartMonth.getFullYear(), scrollStartMonth.getMonth() + i, 1)
+    monthOptions.push(d)
+  }
+
   useEffect(() => {
     function handler(e) {
       if (ref.current && !ref.current.contains(e.target) && panelRef.current && !panelRef.current.contains(e.target)) {
@@ -335,26 +342,46 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
             bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in
           ">
             <div className="p-4 sm:p-6 w-full">
-              <div className="flex items-center justify-between mb-4">
-              <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                <i className="bx bx-chevron-left text-base"></i>
-              </button>
-              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
-                {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
-                {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
-                {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
-              </div>
-              <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                <i className="bx bx-chevron-right text-base"></i>
-              </button>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-              {renderMonth(vy, vm)}
-              {renderMonth(vy, vm + 1)}
-            </div>
+            {isMobile ? (
+              <>
+                <div className="flex items-center justify-center gap-3 text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
+                  {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
+                  {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
+                  {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
+                </div>
+                <div className="overflow-y-auto max-h-[55vh] scrollbar-none">
+                  {monthOptions.map((d, idx) => (
+                    <div key={idx} className="mb-4">
+                      {renderMonth(d.getFullYear(), d.getMonth())}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
+                    <i className="bx bx-chevron-left text-base"></i>
+                  </button>
+                  <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                    {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
+                    {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
+                    {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
+                    {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
+                  </div>
+                  <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
+                    <i className="bx bx-chevron-right text-base"></i>
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                  {renderMonth(vy, vm)}
+                  {renderMonth(vy, vm + 1)}
+                </div>
+              </>
+            )}
             {isMobile && (
               <button type="button" disabled={!selStart || !selEnd}
                 onClick={confirmRange}
