@@ -17,22 +17,6 @@ const PORT = process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
 
-// Lazy DB init for serverless (Vercel)
-let dbInitialized = false
-app.use(async (req, res, next) => {
-  try {
-    if (!dbInitialized) {
-      await initDB()
-      dbInitialized = true
-      console.log('Database initialized on Vercel')
-    }
-    next()
-  } catch (err) {
-    console.error('DB init failed:', err)
-    res.status(500).json({ error: 'Database initialization failed' })
-  }
-})
-
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')))
 
 if (process.env.NODE_ENV === 'production') {
