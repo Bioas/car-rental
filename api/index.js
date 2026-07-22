@@ -1,11 +1,9 @@
-import { initDB } from '../server/db.js'
-import app from '../server/index.js'
+import express from 'express'
 
-try {
-  await initDB()
-  console.log('Database initialized on Vercel')
-} catch (err) {
-  console.error('DB init failed (will retry on request):', err.message)
-}
+const app = express()
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
 
 export default app
