@@ -1,17 +1,15 @@
-import initSqlJs from 'sql.js'
-import fs from 'fs'
-import path from 'path'
-import bcrypt from 'bcryptjs'
-import { fileURLToPath } from 'url'
+const initSqlJs = require('sql.js')
+const fs = require('fs')
+const path = require('path')
+const bcrypt = require('bcryptjs')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isVercel = process.env.VERCEL
 const DB_PATH = isVercel
   ? '/tmp/data.sqlite'
   : path.join(__dirname, '..', 'data.sqlite')
 let db = null
 
-export async function initDB() {
+async function initDB() {
   const SQL = await initSqlJs()
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH)
@@ -115,19 +113,19 @@ export async function initDB() {
   return db
 }
 
-export function getDB() {
+function getDB() {
   if (!db) throw new Error('Database not initialized')
   return db
 }
 
-export function save() {
+function save() {
   if (!db) return
   const data = db.export()
   const buffer = Buffer.from(data)
   fs.writeFileSync(DB_PATH, buffer)
 }
 
-export function query(sql, params = []) {
+function query(sql, params = []) {
   const stmt = db.prepare(sql)
   if (params.length > 0) stmt.bind(params)
   const cols = stmt.getColumnNames()
@@ -139,21 +137,21 @@ export function query(sql, params = []) {
   return { rows, cols }
 }
 
-export function run(sql, params = []) {
+function run(sql, params = []) {
   db.run(sql, params)
   save()
 }
 
-export function get(sql, params = []) {
+function get(sql, params = []) {
   const result = query(sql, params)
   return result.rows.length > 0 ? result.rows[0] : null
 }
 
-export function all(sql, params = []) {
+function all(sql, params = []) {
   return query(sql, params).rows
 }
 
-export function insert(table, data) {
+function insert(table, data) {
   const keys = Object.keys(data)
   const values = Object.values(data)
   const placeholders = keys.map(() => '?').join(', ')
@@ -163,10 +161,12 @@ export function insert(table, data) {
   return result ? result.id : null
 }
 
-export function update(table, data, whereCol, whereVal) {
+function update(table, data, whereCol, whereVal) {
   const keys = Object.keys(data)
   const values = Object.values(data)
   const setClause = keys.map(k => `${k} = ?`).join(', ')
   values.push(whereVal)
   run(`UPDATE ${table} SET ${setClause} WHERE ${whereCol} = ?`, values)
 }
+
+module.exports = { initDB, getDB, save, query, run, get, all, insert, update }

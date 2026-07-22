@@ -1,5 +1,5 @@
-import { initDB, insert, all, run } from './db.js'
-import bcrypt from 'bcryptjs'
+const { initDB, insert, all, run } = require('./db.cjs')
+const bcrypt = require('bcryptjs')
 
 async function seed() {
   await initDB()

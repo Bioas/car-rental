@@ -4,12 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node server/index.js",
+    "dev:server": "node server/index.cjs",
     "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
-    "seed": "node server/seed.js",
-    "start": "node server/index.js"
+    "seed": "node server/seed.cjs",
+    "start": "node server/index.cjs"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.21",

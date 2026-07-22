@@ -1,6 +1,6 @@
-import { Router } from 'express'
-import { all, get } from '../db.js'
-import { authMiddleware } from '../middleware/auth.js'
+const { Router } = require('express')
+const { all, get } = require('../db.cjs')
+const { authMiddleware } = require('../middleware/auth.cjs')
 
 const router = Router()
 
@@ -64,4 +64,4 @@ router.get('/:id', authMiddleware, (req, res) => {
   }
 })
 
-export default router
+module.exports = router

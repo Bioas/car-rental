@@ -1,5 +1,5 @@
-import { Router } from 'express'
-import { all, get, insert } from '../db.js'
+const { Router } = require('express')
+const { all, get, insert } = require('../db.cjs')
 
 const router = Router()
 
@@ -58,8 +58,7 @@ router.get('/calendar', (req, res) => {
        WHERE b.status IN ('pending', 'approved', 'returned')
        ORDER BY b.start_date ASC`
     )
-    // Strip internal admin_notes from the public projection — the public
-    // popup never renders them and they shouldn't leak via this endpoint.
+    // Strip internal admin_notes from the public projection
     const bookings = rows.map(({ admin_notes, ...rest }) => rest)
     res.json({ bookings })
   } catch (err) {
@@ -178,4 +177,4 @@ router.post('/bookings', async (req, res) => {
   }
 })
 
-export default router
+module.exports = router

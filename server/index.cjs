@@ -1,16 +1,14 @@
-import express from 'express'
-import cors from 'cors'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { initDB } from './db.js'
-import authRoutes from './routes/auth.js'
-import carRoutes from './routes/cars.js'
-import bookingRoutes from './routes/bookings.js'
-import notificationRoutes from './routes/notifications.js'
-import adminRoutes from './routes/admin.js'
-import publicRoutes from './routes/public.js'
+const express = require('express')
+const cors = require('cors')
+const path = require('path')
+const { initDB } = require('./db.cjs')
+const authRoutes = require('./routes/auth.cjs')
+const carRoutes = require('./routes/cars.cjs')
+const bookingRoutes = require('./routes/bookings.cjs')
+const notificationRoutes = require('./routes/notifications.cjs')
+const adminRoutes = require('./routes/admin.cjs')
+const publicRoutes = require('./routes/public.cjs')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3000
 
@@ -44,8 +42,7 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
-export { app }
-export default app
+module.exports = app
 
 async function start() {
   await initDB()

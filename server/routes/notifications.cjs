@@ -1,6 +1,6 @@
-import { Router } from 'express'
-import { all, get, update } from '../db.js'
-import { authMiddleware } from '../middleware/auth.js'
+const { Router } = require('express')
+const { all, get, update, run } = require('../db.cjs')
+const { authMiddleware } = require('../middleware/auth.cjs')
 
 const router = Router()
 
@@ -40,4 +40,4 @@ router.put('/read-all', authMiddleware, (req, res) => {
   }
 })
 
-export default router
+module.exports = router

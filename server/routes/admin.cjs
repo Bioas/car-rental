@@ -1,13 +1,12 @@
-import { Router } from 'express'
-import bcrypt from 'bcryptjs'
-import multer from 'multer'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { v4 as uuidv4 } from 'uuid'
-import { all, get, insert, update, run } from '../db.js'
-import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
+const { Router } = require('express')
+const bcrypt = require('bcryptjs')
+const multer = require('multer')
+const path = require('path')
+const crypto = require('crypto')
+const uuidv4 = () => crypto.randomUUID()
+const { all, get, insert, update, run } = require('../db.cjs')
+const { authMiddleware, adminMiddleware } = require('../middleware/auth.cjs')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = Router()
 
 router.use(authMiddleware, adminMiddleware)
@@ -311,4 +310,4 @@ router.get('/reports', (req, res) => {
   }
 })
 
-export default router
+module.exports = router

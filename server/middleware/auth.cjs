@@ -1,8 +1,8 @@
-import jwt from 'jsonwebtoken'
+const jwt = require('jsonwebtoken')
 
 const JWT_SECRET = process.env.JWT_SECRET || 'car-rental-secret-key-2024'
 
-export function generateToken(user) {
+function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name },
     JWT_SECRET,
@@ -10,11 +10,11 @@ export function generateToken(user) {
   )
 }
 
-export function verifyToken(token) {
+function verifyToken(token) {
   return jwt.verify(token, JWT_SECRET)
 }
 
-export function authMiddleware(req, res, next) {
+function authMiddleware(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' })
@@ -29,9 +29,11 @@ export function authMiddleware(req, res, next) {
   }
 }
 
-export function adminMiddleware(req, res, next) {
+function adminMiddleware(req, res, next) {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Forbidden: Admins only' })
   }
   next()
 }
+
+module.exports = { generateToken, verifyToken, authMiddleware, adminMiddleware }
