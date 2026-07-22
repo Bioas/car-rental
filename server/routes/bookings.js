@@ -14,32 +14,6 @@ function addNotification(userId, message, type, relatedType, relatedId) {
   })
 }
 
-router.get('/', authMiddleware, (req, res) => {
-  try {
-    let sql, params
-    if (req.user.role === 'admin') {
-      sql = `SELECT b.*, u.name as user_name, u.email as user_email,
-             c.license_plate, c.brand, c.model
-             FROM bookings b
-             JOIN users u ON b.user_id = u.id
-             JOIN cars c ON b.car_id = c.id
-             ORDER BY b.created_at DESC`
-      params = []
-    } else {
-      sql = `SELECT b.*, c.license_plate, c.brand, c.model
-             FROM bookings b
-             JOIN cars c ON b.car_id = c.id
-             WHERE b.user_id = ?
-             ORDER BY b.created_at DESC`
-      params = [req.user.id]
-    }
-    const bookings = all(sql, params)
-    res.json({ bookings })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
 router.post('/', authMiddleware, (req, res) => {
   try {
     const { car_id, start_date, end_date, purpose, user_id } = req.body
@@ -89,26 +63,6 @@ router.post('/', authMiddleware, (req, res) => {
     })
 
     res.status(201).json({ booking })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-router.put('/:id/cancel', authMiddleware, (req, res) => {
-  try {
-    const booking = get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
-    if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'ไม่มีสิทธิ์ยกเลิก' })
-    }
-    if (booking.status !== 'pending' && booking.status !== 'approved') {
-      return res.status(400).json({ error: 'ไม่สามารถยกเลิกรายการนี้ได้' })
-    }
-
-    update('bookings', { status: 'rejected', updated_at: new Date().toISOString() }, 'id', booking.id)
-
-    addNotification(booking.user_id, `รายการจอง ${booking.id} ถูกยกเลิก`, 'cancelled', 'booking', booking.id)
-    res.json({ message: 'ยกเลิกสำเร็จ' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

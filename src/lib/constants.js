@@ -18,14 +18,11 @@ export const STATUS_COLORS = {
 
 export const PAGE_TITLES = {
   '/': 'แดชบอร์ด',
-  '/cars': 'รถยนต์',
-  '/bookings': 'ประวัติการจอง',
-  '/calendar': 'ปฏิทินการจอง',
   '/notifications': 'การแจ้งเตือน',
-  '/admin/cars': 'จัดการรถยนต์',
-  '/admin/users': 'จัดการผู้ใช้',
-  '/admin/bookings': 'จัดการคำขอยืม',
-  '/admin/reports': 'รายงานสถิติ',
+  '/bookings': 'จัดการคำขอยืม',
+  '/cars': 'จัดการรถยนต์',
+  '/users': 'จัดการผู้ใช้',
+  '/reports': 'รายงานสถิติ',
 }
 
 export function statusLabel(s) {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useApp } from '../../context/AppContext'
-import { statusLabel } from '../../lib/constants'
+import { statusLabel, badgeClass } from '../../lib/constants'
 import { Spinner } from '../../components/ui/spinner'
+import { EmptyState } from '../../components/ui/empty-state'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
 
@@ -19,6 +20,8 @@ export default function BookingsManage() {
   }, [])
 
   const pendingCount = bookings.filter(b => b.status === 'pending').length
+  const rejectedCount = bookings.filter(b => b.status === 'rejected').length
+  const returnedCount = bookings.filter(b => b.status === 'returned').length
   const filteredBookings = filter === 'all' ? bookings : bookings.filter(b => b.status === filter)
 
   async function fetchBookings() {
@@ -62,24 +65,38 @@ export default function BookingsManage() {
 
   return (
     <div className="animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-heading">จัดการคำขอยืม</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">อนุมัติหรือปฏิเสธคำขอยืมยานพาหนะ</p>
         </div>
-        {/* View toggle */}
-        <div className="flex rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden shrink-0">
-          <button onClick={() => { setViewTab('list'); setShowRejectModal(false) }}
-            className={`px-4 h-9 text-sm font-semibold transition-all ${viewTab === 'list' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-            <svg className="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-            รายการ
-          </button>
-          <button onClick={() => { setViewTab('calendar'); setShowRejectModal(false) }}
-            className={`px-4 h-9 text-sm font-semibold transition-all ${viewTab === 'calendar' ? 'bg-brand-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-            <svg className="w-4 h-4 inline mr-1.5 -mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-            ปฏิทิน
-          </button>
-        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 mb-6">
+        <button onClick={() => { setViewTab('list'); setShowRejectModal(false) }}
+          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all border-b-2 -mb-px whitespace-nowrap ${
+            viewTab === 'list'
+              ? 'border-brand-600 text-brand-600 dark:text-brand-400 dark:border-brand-400'
+              : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+          }`}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+          รายการ
+          {pendingCount > 0 && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${viewTab === 'list' ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+              {pendingCount}
+            </span>
+          )}
+        </button>
+        <button onClick={() => { setViewTab('calendar'); setShowRejectModal(false) }}
+          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold transition-all border-b-2 -mb-px whitespace-nowrap ${
+            viewTab === 'calendar'
+              ? 'border-brand-600 text-brand-600 dark:text-brand-400 dark:border-brand-400'
+              : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+          }`}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          ปฏิทิน
+        </button>
       </div>
 
       {viewTab === 'calendar' ? (
@@ -89,18 +106,41 @@ export default function BookingsManage() {
       ) : (
       <>
 
-      <div className="flex gap-2 mb-6 flex-wrap">
-        <button onClick={() => setFilter('all')} className={filter === 'all' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>ทั้งหมด</button>
-        <button onClick={() => setFilter('pending')} className={filter === 'pending' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>รออนุมัติ ({pendingCount})</button>
-        <button onClick={() => setFilter('approved')} className={filter === 'approved' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>อนุมัติแล้ว</button>
-        <button onClick={() => setFilter('rejected')} className={filter === 'rejected' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>ปฏิเสธ</button>
-        <button onClick={() => setFilter('returned')} className={filter === 'returned' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}>คืนแล้ว</button>
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+        {[
+          { key: 'all', label: 'ทั้งหมด', count: null },
+          { key: 'pending', label: 'รออนุมัติ', count: pendingCount },
+          { key: 'approved', label: 'อนุมัติแล้ว', count: null },
+          { key: 'rejected', label: 'ปฏิเสธ', count: rejectedCount },
+          { key: 'returned', label: 'คืนแล้ว', count: returnedCount },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setFilter(f.key)}
+            className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
+              filter === f.key
+                ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
+                : 'bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}>
+            {f.label}
+            {f.count !== null && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                filter === f.key
+                  ? 'bg-white/20 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+              }`}>{f.count}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Mobile Card View */}
       <div className="sm:hidden space-y-3">
         {filteredBookings.length === 0 ? (
-          <div className="card py-12 text-center text-gray-400 text-sm">ไม่มีรายการ</div>
+          <EmptyState
+            icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            message={filter === 'all' ? 'ยังไม่มีรายการขอยืมเข้ามา' : filter === 'pending' ? 'ไม่มีรายการรออนุมัติ' : filter === 'approved' ? 'ไม่มีรายการที่อนุมัติแล้ว' : filter === 'rejected' ? 'ไม่มีรายการที่ปฏิเสธ' : 'ไม่มีรายการที่คืนแล้ว'}
+          />
         ) : (
           filteredBookings.map(b => (
             <div key={b.id} className="bg-white dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-700/50 p-4 space-y-3 shadow-sm">
@@ -117,7 +157,7 @@ export default function BookingsManage() {
                     </div>
                   </div>
                 </div>
-                <span className={`badge-${b.status} shrink-0`}>{statusLabel(b.status)}</span>
+                <span className={badgeClass(b.status) + ' shrink-0'}>{statusLabel(b.status)}</span>
               </div>
 
               {/* Details */}
@@ -180,39 +220,48 @@ export default function BookingsManage() {
               <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">#</th>
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ผู้ยืม</th>
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">รถยนต์</th>
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">วันที่</th>
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เหตุผล</th>
+                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">รถยนต์</th>
+                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">วันที่</th>
+                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เหตุผล</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สถานะ</th>
-                <th className="text-right p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ดำเนินการ</th>
+                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ดำเนินการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-light/40 dark:divide-border-dark/40">
-              {filteredBookings.map(b => (
+              {filteredBookings.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-20">
+                    <EmptyState
+                      icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      message={filter === 'all' ? 'ยังไม่มีรายการขอยืมเข้ามา' : filter === 'pending' ? 'ไม่มีรายการรออนุมัติ' : filter === 'approved' ? 'ไม่มีรายการที่อนุมัติแล้ว' : filter === 'rejected' ? 'ไม่มีรายการที่ปฏิเสธ' : 'ไม่มีรายการที่คืนแล้ว'}
+                    />
+                  </td>
+                </tr>
+              ) : (filteredBookings.map(b => (
                 <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400">{b.id}</td>
                   <td className="p-3 sm:p-4">
                     <span className="text-sm font-medium text-gray-900 dark:text-white">{b.user_name}</span>
                     <span className="text-xs text-gray-500 block">{b.user_email}</span>
                   </td>
-                  <td className="p-3 sm:p-4">
+                  <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{b.brand} {b.model}</span>
                     <span className="text-xs text-gray-500 block">{b.license_plate}</span>
                   </td>
-                  <td className="p-3 sm:p-4">
+                  <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{b.start_date}</span>
                     <span className="text-xs text-gray-400 block">→ {b.end_date}</span>
                   </td>
-                  <td className="p-3 sm:p-4">
+                  <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-600 dark:text-gray-400">{b.purpose || '-'}</span>
                   </td>
                   <td className="p-3 sm:p-4 text-center">
-                    <span className={`badge-${b.status}`}>{statusLabel(b.status)}</span>
+                    <span className={badgeClass(b.status)}>{statusLabel(b.status)}</span>
                     {b.admin_notes && <span className="block text-[10px] text-gray-400 mt-0.5">{b.admin_notes}</span>}
                   </td>
-                  <td className="p-3 sm:p-4 text-right">
+                  <td className="p-3 sm:p-4 text-center">
                     {b.status === 'pending' && (
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-center">
                         <button onClick={() => approveBooking(b.id)} className="btn-success btn-sm">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
                           อนุมัติ
@@ -231,7 +280,7 @@ export default function BookingsManage() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

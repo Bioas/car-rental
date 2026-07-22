@@ -7,8 +7,6 @@ import { AppLayout } from './components/AppLayout'
 const PublicBooking = lazy(() => import('./pages/PublicBooking'))
 const Login = lazy(() => import('./pages/auth/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Bookings = lazy(() => import('./pages/Bookings'))
-const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const CarsManage = lazy(() => import('./pages/admin/CarsManage'))
 const UsersManage = lazy(() => import('./pages/admin/UsersManage'))
@@ -28,14 +26,6 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-function AdminRoute({ children }) {
-  const { isLoggedIn, isAdmin, userLoaded } = useApp()
-  if (!userLoaded) return <Spinner />
-  if (!isLoggedIn) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/app/" replace />
-  return children
-}
-
 function Lazy({ children }) {
   return <Suspense fallback={<Spinner />}>{children}</Suspense>
 }
@@ -47,13 +37,12 @@ export default function App() {
       <Route path="/login" element={<GuestRoute><Lazy><Login /></Lazy></GuestRoute>} />
       <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route index element={<Lazy><Dashboard /></Lazy>} />
-        <Route path="bookings" element={<Lazy><Bookings /></Lazy>} />
-        <Route path="calendar" element={<Lazy><CalendarPage /></Lazy>} />
+        <Route path="bookings" element={<Lazy><BookingsManage /></Lazy>} />
+        <Route path="cars" element={<Lazy><CarsManage /></Lazy>} />
+        <Route path="users" element={<Lazy><UsersManage /></Lazy>} />
+        <Route path="reports" element={<Lazy><Reports /></Lazy>} />
+        <Route path="calendar" element={<Navigate to="/app/bookings" replace />} />
         <Route path="notifications" element={<Lazy><Notifications /></Lazy>} />
-        <Route path="admin/cars" element={<AdminRoute><Lazy><CarsManage /></Lazy></AdminRoute>} />
-        <Route path="admin/users" element={<AdminRoute><Lazy><UsersManage /></Lazy></AdminRoute>} />
-        <Route path="admin/bookings" element={<AdminRoute><Lazy><BookingsManage /></Lazy></AdminRoute>} />
-        <Route path="admin/reports" element={<AdminRoute><Lazy><Reports /></Lazy></AdminRoute>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
