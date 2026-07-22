@@ -1,20 +1,3 @@
-const { initDB } = require('./db.cjs')
+// Test: does require('./server.cjs') work without DB init?
 const app = require('./server.cjs')
-
-// Kick off DB init on cold start
-const ready = initDB().catch(err => {
-  console.error('DB init failed:', err)
-  throw err
-})
-
-module.exports = async (req, res) => {
-  try {
-    await ready
-    app(req, res)
-  } catch (err) {
-    console.error('Handler error:', err)
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Internal server error' })
-    }
-  }
-}
+module.exports = app
