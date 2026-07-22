@@ -10,7 +10,15 @@ const DB_PATH = isVercel
 let db = null
 
 async function initDB() {
-  const SQL = await initSqlJs()
+  // Help sql.js find its WASM file on Vercel's bundled filesystem
+  const sqlJsDir = path.dirname(require.resolve('sql.js'))
+  const locateFile = (file) => {
+    // Try dist/ first, then the package root
+    const distPath = path.join(sqlJsDir, 'dist', file)
+    if (fs.existsSync(distPath)) return distPath
+    return path.join(sqlJsDir, file)
+  }
+  const SQL = await initSqlJs({ locateFile })
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH)
     db = new SQL.Database(buffer)
