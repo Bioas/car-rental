@@ -56,6 +56,7 @@ export function AppProvider({ children }) {
     if (!res.ok) throw new Error(data.error)
     setToken(data.token)
     setUser(data.user)
+    setUserLoaded(true)
     localStorage.setItem('token', data.token)
   }, [])
 
@@ -69,6 +70,7 @@ export function AppProvider({ children }) {
     if (!res.ok) throw new Error(data.error)
     setToken(data.token)
     setUser(data.user)
+    setUserLoaded(true)
     localStorage.setItem('token', data.token)
   }, [])
 
