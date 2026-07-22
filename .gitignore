@@ -20,3 +20,4 @@ server.log
 .freebuff/preview-*.log
 *.tmp
 _test_*
+nul

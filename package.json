@@ -17,6 +17,7 @@
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",
     "bcryptjs": "^3.0.3",
+    "boxicons": "^2.1.4",
     "chart.js": "^4.5.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",

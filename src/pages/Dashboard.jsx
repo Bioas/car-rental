@@ -5,9 +5,9 @@ import { StatCard } from '../components/StatCard'
 import { statusLabel, badgeClass } from '../lib/constants'
 
 export default function Dashboard() {
-  const { isAdmin, authHeaders } = useApp()
+  const { isAdmin, authHeaders, fetchNotificationCount } = useApp()
   const [stats, setStats] = useState({ totalCars: 0, availableCars: 0, pendingBookings: 0 })
-  const [recentBookings, setRecentBookings] = useState([])
+  const [pendingList, setPendingList] = useState([])
   const [availableCarsList, setAvailableCarsList] = useState([])
   const [activeBookings, setActiveBookings] = useState(0)
   const [bookingsByCar, setBookingsByCar] = useState([])
@@ -37,7 +37,7 @@ export default function Dashboard() {
       if (bookingsRes.ok) {
         const bookingData = await bookingsRes.json()
         const all = bookingData.bookings || []
-        setRecentBookings(all.slice(0, 5))
+        setPendingList(all.filter(b => b.status === 'pending').slice(0, 6))
         const today = new Date().toISOString().split('T')[0]
         setActiveBookings(all.filter(b => b.status === 'approved' && b.start_date <= today && b.end_date >= today).length)
       }
@@ -63,52 +63,98 @@ export default function Dashboard() {
     }
   }
 
+  async function approveBooking(id) {
+    try {
+      const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
+      if (res.ok) { fetchData(); fetchNotificationCount() }
+    } catch (e) { console.error(e) }
+  }
+
+  async function rejectBooking(id) {
+    try {
+      const res = await fetch(`/api/admin/bookings/${id}/reject`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_notes: '' })
+      })
+      if (res.ok) { fetchData(); fetchNotificationCount() }
+    } catch (e) { console.error(e) }
+  }
+
   function pctCount(count) { return maxCarCount > 0 ? (count / maxCarCount) * 100 : 0 }
-  function barHeight(count) { return maxMonthly > 0 ? (count / maxMonthly) * 85 : 0 }
+  function barHeight(count) { return maxMonthly > 0 ? Math.round((count / maxMonthly) * 168) : 0 }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="animate-fade-in flex flex-col flex-1 min-h-0 space-y-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
         <StatCard title="รถยนต์ทั้งหมด" value={stats.totalCars} color="brand">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+          <i className="bx bx-car text-xl"></i>
         </StatCard>
         <StatCard title="พร้อมใช้งาน" value={stats.availableCars} color="emerald">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <i className="bx bxs-check-circle text-xl"></i>
         </StatCard>
         <StatCard title="กำลังใช้งานวันนี้" value={activeBookings} color="amber">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+          <i className="bx bx-calendar text-xl"></i>
         </StatCard>
         {isAdmin && (
           <StatCard title="รออนุมัติ" value={stats.pendingBookings} color="red">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <i className="bx bx-time-five text-xl"></i>
           </StatCard>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        <div className="card p-6">
+        <div className="card p-6 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-heading font-semibold text-gray-900 dark:text-white">การจองล่าสุด</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-heading font-semibold text-gray-900 dark:text-white">คำขอจอง</h3>
+              {pendingList.length > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                  {pendingList.length}
+                </span>
+              )}
+            </div>
             <Link to="/app/bookings" className="text-xs text-brand-600 dark:text-brand-400 hover:underline">ดูทั้งหมด</Link>
           </div>
-          {recentBookings.length === 0 ? (
-            <div className="text-center py-8 text-gray-400"><p>ยังไม่มีการจอง</p></div>
+          {pendingList.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+              <i className="bx bxs-check-circle text-3xl opacity-40 mb-2 block"></i>
+              <p className="text-sm">ไม่มีคำขอรออนุมัติ</p>
+            </div>
           ) : (
             <div className="space-y-3">
-              {recentBookings.map(b => (
-                <div key={b.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
-                      <span className="text-sm font-semibold text-brand-700 dark:text-brand-300 font-heading">
-                        {b.brand?.charAt(0)}{b.model?.charAt(0)}
-                      </span>
+              {pendingList.map(b => (
+                <div key={b.id} className="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                        <i className="bx bx-user text-sm text-amber-600 dark:text-amber-400"></i>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.user_name}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.user_email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{b.brand} {b.model}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{b.start_date} → {b.end_date}</p>
-                    </div>
+                    <span className={badgeClass(b.status) + ' shrink-0 ml-2'}>{statusLabel(b.status)}</span>
                   </div>
-                  <span className={badgeClass(b.status)}>{statusLabel(b.status)}</span>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    <i className="bx bx-car text-sm"></i>
+                    <span>{b.brand} {b.model} · {b.license_plate}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mb-3">
+                    <i className="bx bx-calendar text-sm"></i>
+                    <span>{b.start_date} → {b.end_date}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => approveBooking(b.id)}
+                      className="flex-1 h-8 inline-flex items-center justify-center gap-1 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors">
+                      <i className="bx bx-check text-sm"></i> อนุมัติ
+                    </button>
+                    <button onClick={() => rejectBooking(b.id)}
+                      className="flex-1 h-8 inline-flex items-center justify-center gap-1 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">
+                      <i className="bx bx-x text-sm"></i> ปฏิเสธ
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -120,11 +166,11 @@ export default function Dashboard() {
             <h3 className="font-heading font-semibold text-gray-900 dark:text-white">รถยนต์พร้อมใช้</h3>
             <Link to="/app/cars" className="text-xs text-brand-600 dark:text-brand-400 hover:underline">ดูทั้งหมด</Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {availableCarsList.map(car => (
               <div key={car.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+                  <i className="bx bx-car text-xl text-emerald-600 dark:text-emerald-400"></i>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">{car.brand} {car.model}</p>
@@ -202,13 +248,13 @@ export default function Dashboard() {
             {bookingsByMonth.length === 0 ? (
               <div className="text-center py-8 text-gray-400 text-sm">ยังไม่มีข้อมูล</div>
             ) : (
-              <div className="flex items-end gap-2 sm:gap-3 h-44">
+              <div className="flex items-end gap-2 sm:gap-3 h-52">
                 {[...bookingsByMonth].reverse().map(m => (
                   <div key={m.month} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
                     <span className="text-[10px] sm:text-xs font-medium text-gray-500 dark:text-gray-400">{m.count}</span>
                     <div
                       className="w-full rounded-t-lg bg-gradient-to-t from-brand-600 to-brand-400 hover:from-brand-500 hover:to-brand-300 transition-all duration-300 min-h-[4px]"
-                      style={{ height: barHeight(m.count) + '%' }}
+                      style={{ height: barHeight(m.count) + 'px' }}
                       title={`${m.month}: ${m.count} การจอง`}
                     />
                     <span className="text-[9px] sm:text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">

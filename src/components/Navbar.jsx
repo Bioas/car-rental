@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { PAGE_TITLES, timeAgo } from '../lib/constants'
+import { timeAgo } from '../lib/constants'
 
 const NOTIF_TYPES = {
-  approved: { label: 'อนุมัติแล้ว', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
-  rejected: { label: 'ปฏิเสธ', icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
-  booking_request: { label: 'คำขอจอง', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
-  cancelled: { label: 'ยกเลิก', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+  approved: { label: 'อนุมัติแล้ว', icon: 'bxs-check-circle', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+  rejected: { label: 'ปฏิเสธ', icon: 'bxs-x-circle', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
+  booking_request: { label: 'คำขอจอง', icon: 'bx-calendar', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
+  cancelled: { label: 'ยกเลิก', icon: 'bxs-info-circle', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
 }
 
 function getNotifType(type) {
-  return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
+  return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'bxs-info-circle', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
 }
 
 export function Navbar() {
@@ -90,17 +90,14 @@ export function Navbar() {
     }
   }
 
-  const pageKey = location.pathname.replace(/^\/app/, '') || '/'
-  const pageTitle = PAGE_TITLES[pageKey] || 'ยานพาหนะ'
   const initials = user?.name ? user.name.charAt(0).toUpperCase() : '?'
 
   return (
     <header className="h-20 border-b border-border-light dark:border-border-dark bg-card-light/80 dark:bg-card-dark/80 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
       <div className="flex items-center gap-3">
         <button onClick={toggleSidebar} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 lg:hidden transition-colors">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          <i className="bx bx-menu text-xl"></i>
         </button>
-        <h2 className="font-heading font-bold text-xl sm:text-2xl lg:text-3xl text-gray-900 dark:text-white">{pageTitle}</h2>
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -112,9 +109,9 @@ export function Navbar() {
         >
           <div className={`transition-transform duration-300 ease-out ${darkAnimating ? 'rotate-180 scale-75' : 'rotate-0 scale-100'}`}>
             {darkMode ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              <i className="bx bx-sun text-xl"></i>
             ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+              <i className="bx bx-moon text-xl"></i>
             )}
           </div>
         </button>
@@ -128,7 +125,7 @@ export function Navbar() {
             }}
             className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+            <i className="bx bx-bell text-xl"></i>
             {notificationCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 ring-2 ring-white dark:ring-card-dark">
                 {notificationCount > 99 ? '99+' : notificationCount}
@@ -169,9 +166,7 @@ export function Navbar() {
                           }`}
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${t.color}`}>
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={t.icon} />
-                          </svg>
+                          <i className={`bx ${t.icon} text-base`}></i>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-0.5">
@@ -191,9 +186,7 @@ export function Navbar() {
                   })
                 ) : (
                   <div className="text-center py-10 text-gray-400">
-                    <svg className="w-10 h-10 mx-auto mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
+                    <i className="bx bx-bell text-4xl mx-auto mb-2 opacity-40 block"></i>
                     <p className="text-sm">ไม่มีการแจ้งเตือน</p>
                   </div>
                 )}
@@ -238,9 +231,7 @@ export function Navbar() {
                   onClick={logout}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
+                  <i className="bx bx-log-out text-base"></i>
                   ออกจากระบบ
                 </button>
               </div>

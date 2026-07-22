@@ -26,7 +26,7 @@ export default function Reports() {
   }
 
   function barHeight(count) {
-    return maxMonthly > 0 ? (count / maxMonthly) * 85 : 0
+    return maxMonthly > 0 ? Math.round((count / maxMonthly) * 152) : 0
   }
 
   async function fetchReports() {
@@ -56,7 +56,7 @@ export default function Reports() {
   if (loading) return <Spinner />
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in flex flex-col flex-1 min-h-0">
       <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-heading mb-6">รายงานสถิติ</h2>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
@@ -109,12 +109,12 @@ export default function Reports() {
             <div className="text-center py-6 text-gray-400 text-sm">ไม่มีข้อมูล</div>
           ) : (
             <div className="flex items-end gap-3 h-48">
-              {bookingsByMonth.map(m => (
+              {[...bookingsByMonth].reverse().map(m => (
                 <div key={m.month} className="flex-1 flex flex-col items-center gap-2">
                   <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{m.count}</span>
                   <div
                     className="w-full rounded-lg bg-gradient-to-t from-brand-600 to-brand-400 transition-all duration-500"
-                    style={{ height: barHeight(m.count) + '%' }}
+                    style={{ height: barHeight(m.count) + 'px' }}
                   />
                   <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">{m.month}</span>
                 </div>

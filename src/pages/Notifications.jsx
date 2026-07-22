@@ -8,23 +8,21 @@ const FILTERS = [
 ]
 
 const NOTIF_TYPES = {
-  approved: { label: 'อนุมัติแล้ว', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
-  rejected: { label: 'ปฏิเสธ', icon: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
-  booking_request: { label: 'คำขอจอง', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
-  cancelled: { label: 'ยกเลิก', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
+  approved: { label: 'อนุมัติแล้ว', icon: 'bxs-check-circle', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
+  rejected: { label: 'ปฏิเสธ', icon: 'bxs-x-circle', color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
+  booking_request: { label: 'คำขอจอง', icon: 'bx-calendar', color: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400' },
+  cancelled: { label: 'ยกเลิก', icon: 'bxs-info-circle', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
 }
 
 function getNotifType(type) {
-  return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
+  return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'bxs-info-circle', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
 }
 
 function NotifIcon({ type }) {
   const t = getNotifType(type)
   return (
     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${t.color}`}>
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={t.icon} />
-      </svg>
+      <i className={`bx ${t.icon} text-xl`}></i>
     </div>
   )
 }
@@ -146,7 +144,7 @@ export default function Notifications() {
 
   if (loading) {
     return (
-      <div className="animate-fade-in max-w-4xl">
+      <div className="animate-fade-in max-w-4xl flex flex-col flex-1 min-h-0">
         <div className="mb-6">
           <div className="h-8 w-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse mb-2" />
           <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
@@ -159,8 +157,7 @@ export default function Notifications() {
   }
 
   return (
-    <div className="animate-fade-in max-w-4xl">
-      {/* Header */}
+    <div className="animate-fade-in max-w-4xl flex flex-col flex-1 min-h-0">
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-3">
           <div>
@@ -182,9 +179,7 @@ export default function Notifications() {
             onClick={readAll}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
+            <i className="bx bx-check-double text-base"></i>
             อ่านทั้งหมด
           </button>
         )}
@@ -217,9 +212,7 @@ export default function Notifications() {
         <div className="card py-20">
           <div className="text-center max-w-xs mx-auto">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center">
-              <svg className="w-10 h-10 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
+              <i className="bx bx-bell text-4xl text-gray-300 dark:text-gray-600"></i>
             </div>
             <h3 className="text-base font-medium text-gray-500 dark:text-gray-400 font-heading mb-1">ยังไม่มีการแจ้งเตือน</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500">
@@ -233,9 +226,7 @@ export default function Notifications() {
         <div className="card py-16">
           <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-emerald-500 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <i className="bx bxs-check-circle text-3xl text-emerald-500 dark:text-emerald-400"></i>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">อ่านการแจ้งเตือนทั้งหมดแล้ว</p>
           </div>

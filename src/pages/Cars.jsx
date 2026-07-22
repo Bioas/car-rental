@@ -88,9 +88,7 @@ export default function Cars() {
         </div>
         <div className="flex items-center gap-3">
           <div className="relative flex-1 sm:flex-initial">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <i className="bx bx-search absolute left-3 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -160,17 +158,13 @@ export default function Cars() {
                   )}
                   {car.year && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+                      <i className="bx bx-calendar text-xs"></i>
                       {car.year}
                     </span>
                   )}
                   {car.seats != null && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
+                      <i className="bx bx-user text-xs"></i>
                       {car.seats} ที่นั่ง
                     </span>
                   )}
@@ -202,9 +196,7 @@ export default function Cars() {
         {filteredCars.length === 0 && (
           <div className="col-span-full flex flex-col items-center justify-center py-24 text-center">
             <div className="w-20 h-20 rounded-2xl bg-gray-50 dark:bg-gray-800 flex items-center justify-center mb-5">
-              <svg className="w-10 h-10 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-              </svg>
+              <i className="bx bx-car text-4xl text-gray-300 dark:text-gray-600"></i>
             </div>
             <h3 className="text-base font-semibold text-gray-700 dark:text-gray-300 mb-1">ไม่พบรถยนต์</h3>
             <p className="text-sm text-gray-400 dark:text-gray-500 max-w-sm">

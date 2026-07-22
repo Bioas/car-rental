@@ -129,6 +129,22 @@
     @apply bg-gray-300 dark:bg-gray-600 rounded-full;
   }
 
+  .scrollbar-horizontal {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-horizontal::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .scrollbar-horizontal::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .scrollbar-horizontal::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  }
+
   .scrollbar-none {
     scrollbar-width: none;
   }

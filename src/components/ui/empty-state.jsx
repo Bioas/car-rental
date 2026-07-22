@@ -4,9 +4,7 @@ export function EmptyState({ icon, message, action }) {
   return (
     <div className="text-center py-16 text-gray-400">
       {icon && (
-        <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d={icon} />
-        </svg>
+        <i className={`bx ${icon} text-6xl mx-auto mb-4 opacity-50 block`}></i>
       )}
       <p>{message}</p>
       {action && <div className="mt-2">{action}</div>}

@@ -24,6 +24,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const canManageBookings = isAdmin && !publicMode
   const [FullCal, setFullCal] = useState(null)
   const [plugins, setPlugins] = useState([])
+  const [locale, setLocale] = useState(null)
   const [loaded, setLoaded] = useState(false)
   const [events, setEvents] = useState([])
   const [rawBookings, setRawBookings] = useState([])
@@ -56,9 +57,11 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       import('@fullcalendar/react'),
       import('@fullcalendar/daygrid'),
       import('@fullcalendar/interaction'),
-    ]).then(([fc, dg, ip]) => {
+      import('@fullcalendar/core/locales/th'),
+    ]).then(([fc, dg, ip, th]) => {
       setFullCal(() => fc.default)
       setPlugins([dg.default, ip.default])
+      setLocale(() => th.default)
       setLoaded(true)
     })
   }, [])
@@ -297,7 +300,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           {!publicMode && (
           <button onClick={() => openBooking(todayStr(), null)}
             className="inline-flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 active:from-brand-600 active:to-brand-700 shadow-md shadow-brand-200/50 hover:shadow-lg hover:shadow-brand-300/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2">
-            <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+            <i className="bx bx-plus text-sm sm:text-base"></i>
             <span className="hidden sm:inline">จองรถ</span>
           </button>
           )}
@@ -311,14 +314,14 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
             <div className="flex items-center gap-0.5 sm:gap-1">
               <button onClick={handlePrev}
                 className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
-                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <i className="bx bx-chevron-left text-xs sm:text-sm"></i>
               </button>
               <h2 className="text-xs sm:text-base font-bold text-neutral-800 dark:text-white min-w-[100px] sm:min-w-[160px] text-center select-none leading-tight">
                 {viewTitle}
               </h2>
               <button onClick={handleNext}
                 className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
-                <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                <i className="bx bx-chevron-right text-xs sm:text-sm"></i>
               </button>
             </div>
             <div className="flex rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 overflow-hidden">
@@ -343,10 +346,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
 
         {viewMode === 'month' && (!loaded || !FullCal ? (
           <div className="flex items-center justify-center flex-1">
-            <svg className="w-8 h-8 animate-spin text-brand-600" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <i className="bx bx-loader-alt text-3xl animate-spin text-brand-600"></i>
           </div>
         ) : (
           <div ref={fcContainerRef} className="fc-custom p-3 sm:p-4 flex flex-col flex-1 min-h-0 month-view-enter">
@@ -355,6 +355,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
               plugins={plugins}
               initialView="dayGridMonth"
               firstDay={1}
+              locale={locale}
               height={Math.max(300, calHeight)}
               expandRows={true}
               dayMaxEvents={false}
@@ -367,7 +368,6 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                 if (b) setDetailBooking(b)
               }}
               fixedWeekCount={false}
-              titleFormat={{ year: 'numeric', month: 'long' }}
             />
           </div>
         ))}
@@ -376,7 +376,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           <div ref={weekContainerRef} className="overflow-x-auto flex-1 min-h-[400px] flex flex-col week-view-enter">
             {visibleCars.length === 0 ? (
               <div className="text-center py-16 px-4">
-                <svg className="w-10 h-10 mx-auto mb-3 text-neutral-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <i className="bx bx-calendar text-4xl mx-auto mb-3 text-neutral-300"></i>
                 <h3 className="text-base font-semibold text-neutral-700 dark:text-gray-300 mb-1">ไม่มีรถยนต์</h3>
                 <p className="text-sm text-neutral-400">กรุณาเพิ่มรถยนต์ก่อน</p>
               </div>
@@ -403,12 +403,11 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                     const maxTracks = Math.max(1, ...bars.map(b => b.totalTracks || 1))
                     return (
                       <div key={car.id} className="grid flex-1 min-h-[60px] sm:min-h-[80px] week-car-row" style={{ '--delay': `${ci * 0.05}s`, gridTemplateColumns: `clamp(90px, 18vw, 180px) repeat(7, 1fr)` }}>
-                        <div className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-2 sm:px-3 border-b border-r border-neutral-100/30 dark:border-gray-700/30 flex items-center gap-1.5 sm:gap-2 h-full">
+                        <div className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-2 sm:px-3 border-b border-r border-neutral-100/30 dark:border-gray-700/30 flex items-center h-full">
                           <div className="min-w-0">
-                            <div className="text-xs sm:text-sm font-medium text-neutral-800 dark:text-gray-100 truncate leading-tight">{car.brand} {car.model}</div>
-                            <div className="text-[9px] sm:text-[10px] text-neutral-400 dark:text-gray-500 truncate hidden sm:block">{car.license_plate}</div>
+                            <div className="text-xs sm:text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{car.brand} {car.model}</div>
+                            <div className="text-[9px] sm:text-[10px] text-neutral-400 dark:text-gray-500 truncate">{car.license_plate}</div>
                           </div>
-                          <span className={`ml-auto w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${car.status === 'available' ? 'bg-emerald-400' : car.status === 'maintenance' ? 'bg-amber-400' : 'bg-gray-400'}`} />
                         </div>
                         <div className="relative col-span-full h-full" style={{ gridColumn: '2 / 9' }}>
                           <div className="grid h-full" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
@@ -474,13 +473,13 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
               <h3 className="font-bold text-neutral-800 dark:text-white text-base">รายละเอียดการจอง</h3>
               <button onClick={() => setDetailBooking(null)}
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-600 transition-colors">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <i className="bx bx-x text-base"></i>
               </button>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  <i className="bx bx-calendar text-xl"></i>
                 </div>
                 <div className="min-w-0">
                   <div className="font-semibold text-neutral-800 dark:text-white truncate">{detailBooking.brand} {detailBooking.model}</div>
@@ -488,11 +487,11 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-gray-300">
-                <svg className="w-4 h-4 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <i className="bx bx-user text-base text-neutral-400 shrink-0"></i>
                 <span className="truncate">{detailBooking.user_name}</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-gray-300">
-                <svg className="w-4 h-4 text-neutral-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <i className="bx bx-calendar text-base text-neutral-400 shrink-0"></i>
                 <span>{new Date(detailBooking.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 <span className="text-neutral-300 dark:text-gray-600">→</span>
                 <span>{new Date(detailBooking.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
@@ -508,19 +507,19 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                 <div className="flex gap-2">
                   <button onClick={() => adminApprove(detailBooking.id)}
                     className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    <i className="bx bx-check text-sm"></i>
                     อนุมัติ
                   </button>
                   <button onClick={() => setRejectModal({ open: true, reason: '' })}
                     className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-rose-500 hover:bg-rose-600 active:bg-rose-700 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <i className="bx bx-x text-sm"></i>
                     ปฏิเสธ
                   </button>
                 </div>
               ) : canManageBookings && detailBooking.status === 'approved' ? (
                 <button onClick={() => adminReturn(detailBooking.id)}
                   className="w-full flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                  <i className="bx bx-refresh text-sm"></i>
                   คืนรถ
                 </button>
               ) : (
@@ -702,6 +701,9 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         .fc-custom .fc-col-header-cell:hover .fc-col-header-cell-cushion {
           color: #3b82f6;
         }
+        .fc-custom .fc-day-sun .fc-col-header-cell-cushion {
+          color: #f43f5e !important;
+        }
         .fc-custom .fc-event {
           border-radius: 999px;
           padding: 1px 6px;
@@ -808,6 +810,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         .dark .fc-custom .fc-daygrid-day-number { color: #d1d5db }
         .dark .fc-custom .fc-col-header-cell-cushion { color: #9ca3af }
         .dark .fc-custom .fc-col-header-cell:hover .fc-col-header-cell-cushion { color: #60a5fa }
+        .dark .fc-custom .fc-day-sun .fc-col-header-cell-cushion { color: #fb7185 !important; }
         .dark .fc-custom .fc-scrollgrid-section-header td {
           border-bottom-color: rgba(255,255,255,0.06) !important;
           border-right-color: rgba(255,255,255,0.04) !important;

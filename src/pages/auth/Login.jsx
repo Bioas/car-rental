@@ -30,9 +30,7 @@ export default function Login() {
         <div className="w-full max-w-md animate-slide-up">
           <div className="text-center mb-10">
             <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-5 shadow-xl shadow-brand-500/30">
-              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <i className="bx bxs-zap text-3xl text-white"></i>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-heading">เข้าสู่ระบบ</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">ระบบบริหารจัดการยานพาหนะ</p>
@@ -51,14 +49,14 @@ export default function Login() {
 
               {error && (
                 <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
-                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <i className="bx bx-error-circle text-base flex-shrink-0"></i>
                   <span>{error}</span>
                 </div>
               )}
 
               <button type="submit" disabled={loading} className="btn-primary w-full">
                 {loading && (
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <i className="bx bx-loader-alt text-base animate-spin"></i>
                 )}
                 <span>เข้าสู่ระบบ</span>
               </button>
@@ -81,9 +79,7 @@ export default function Login() {
         </div>
         <div className="relative text-white text-center max-w-md">
           <div className="w-20 h-20 rounded-2xl bg-white/10 backdrop-blur flex items-center justify-center mx-auto mb-8">
-            <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-            </svg>
+            <i className="bx bx-car text-4xl"></i>
           </div>
           <h2 className="text-3xl font-bold font-heading mb-4">ยินดีต้อนรับ</h2>
           <p className="text-lg text-white/70">ระบบบริหารจัดการยานพาหนะสำหรับองค์กร จองง่าย จัดการสะดวก</p>

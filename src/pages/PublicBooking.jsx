@@ -15,6 +15,16 @@ function todayStr() {
   return new Date().toLocaleDateString('en-CA')
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 640)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return isMobile
+}
+
 function DatePicker({ value, onChange, min }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -23,6 +33,7 @@ function DatePicker({ value, onChange, min }) {
   today.setHours(0, 0, 0, 0)
   const minDate = min ? new Date(min + 'T00:00:00') : today
   const [viewDate, setViewDate] = useState(value ? new Date(value + 'T00:00:00') : today)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     if (value) setViewDate(new Date(value + 'T00:00:00'))
@@ -58,7 +69,7 @@ function DatePicker({ value, onChange, min }) {
     const date = new Date(vy, vm, d)
     if (date < minDate) return
     onChange(date.toLocaleDateString('en-CA'))
-    setOpen(false)
+    if (!isMobile) setOpen(false)
   }
 
   const selectedDate = value ? new Date(value + 'T00:00:00') : null
@@ -74,9 +85,7 @@ function DatePicker({ value, onChange, min }) {
             ? `${selectedDate.getDate()} ${THAI_SHORT[selectedDate.getMonth() + 1]} ${selectedDate.getFullYear() + 543}`
             : 'เลือกวันที่'}
         </span>
-        <svg className={`w-4 h-4 text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
+        <i className={`bx bx-calendar text-base text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {open && (
         <div ref={panelRef} className="absolute z-50 top-full mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl overflow-hidden origin-top">
@@ -84,17 +93,19 @@ function DatePicker({ value, onChange, min }) {
             <div className="flex items-center justify-between mb-2">
               <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
                 className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/40 text-gray-600 dark:text-gray-400 transition-colors text-xs">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <i className="bx bx-chevron-left text-xs"></i>
               </button>
               <div className="text-xs font-semibold text-gray-800 dark:text-gray-100">{THAI_SHORT[vm + 1]} {vy + 543}</div>
               <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
                 className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/40 text-gray-600 dark:text-gray-400 transition-colors text-xs">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                <i className="bx bx-chevron-right text-xs"></i>
               </button>
             </div>
             <div className="grid grid-cols-7 mb-1">
-              {DAYS_TH.map(d => (
-                <div key={d} className="flex items-center justify-center h-6 text-[10px] text-gray-400 dark:text-gray-500 font-medium">{d}</div>
+              {DAYS_TH.map((d, i) => (
+                <div key={d} className={`flex items-center justify-center h-6 text-[10px] font-medium ${
+                  i === 0 ? 'text-rose-400 dark:text-rose-300' : i === 6 ? 'text-indigo-400 dark:text-indigo-300' : 'text-gray-400 dark:text-gray-500'
+                }`}>{d}</div>
               ))}
             </div>
             <div className="grid grid-cols-7 gap-0.5">
@@ -103,19 +114,36 @@ function DatePicker({ value, onChange, min }) {
                 const isSel = isSameDay(d, selectedDate)
                 const disabled = isDisabled(c.d)
                 const isTd = isSameDay(d, today)
+                const dow = i % 7
                 return (
                   <button key={i} type="button" disabled={disabled}
                     onClick={() => !c.other && pickDate(c.d)}
                     className={`flex items-center justify-center w-full aspect-square text-center text-xs rounded-lg transition-colors ${
-                      c.other ? 'text-gray-200 dark:text-gray-600 cursor-default' : 'text-gray-700 dark:text-gray-300 hover:bg-brand-50 dark:hover:bg-brand-950/40'
-                    } ${isSel ? 'bg-brand-600 text-white font-semibold hover:bg-brand-700' : ''} ${isTd && !isSel ? 'text-brand-600 dark:text-brand-400 font-semibold' : ''} ${
-                      disabled ? 'text-gray-200 dark:text-gray-600 cursor-not-allowed hover:bg-transparent' : ''
+                      c.other || disabled ? 'text-gray-200 dark:text-gray-600 cursor-default' 
+                        : isSel ? '' 
+                        : dow === 0 ? 'text-rose-400 dark:text-rose-300' 
+                        : dow === 6 ? 'text-indigo-400 dark:text-indigo-300' 
+                        : 'text-gray-700 dark:text-gray-300'
+                    } ${!c.other && !isSel && !disabled ? 'hover:bg-brand-50 dark:hover:bg-brand-950/40' : ''} ${isSel ? 'bg-brand-600 text-white font-semibold hover:bg-brand-700' : ''} ${isTd && !isSel ? 'text-brand-600 dark:text-brand-400 font-semibold' : ''} ${
+                      disabled ? 'cursor-not-allowed hover:bg-transparent' : ''
                     }`}>
                     {c.d}
                   </button>
                 )
               })}
             </div>
+            {isMobile && (
+              <button type="button" disabled={!selectedDate}
+                onClick={() => setOpen(false)}
+                className="w-full mt-3 h-10 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all shadow-md ${
+                  selectedDate
+                    ? 'text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800'
+                    : 'text-gray-400 bg-gray-100 dark:bg-gray-700 cursor-not-allowed'
+                }">
+                <i className="bx bx-check text-base"></i>
+                ตกลง
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -133,6 +161,7 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
   const [step, setStep] = useState('start')
   const [hoverDate, setHoverDate] = useState(null)
   const [viewDate, setViewDate] = useState(today)
+  const isMobile = useIsMobile()
 
   const vy = viewDate.getFullYear()
   const vm = viewDate.getMonth()
@@ -164,9 +193,16 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
         return
       }
       onChange(startDate, date.toLocaleDateString('en-CA'))
-      setOpen(false)
-      setStep('start')
+      if (!isMobile) {
+        setOpen(false)
+        setStep('start')
+      }
     }
+  }
+
+  function confirmRange() {
+    setOpen(false)
+    setStep('start')
   }
 
   function renderMonth(y, m) {
@@ -200,19 +236,20 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
 
     return (
       <div className="flex-1 min-w-0">
-        <div className="text-center font-semibold text-sm text-gray-800 dark:text-gray-100 mb-3">{THAI_SHORT[m + 1]} {y + 543}</div>
-        <div className="grid grid-cols-7 mb-1.5">
-          {DAYS_TH.map(d => <div key={d} className="flex items-center justify-center h-7 text-[11px] text-gray-400 dark:text-gray-500 font-medium">{d}</div>)}
-        </div>
+        <div className="text-center font-semibold text-sm text-gray-800 dark:text-gray-100 mb-3">{THAI_SHORT[m + 1]} {y + 543}</div>        <div className="grid grid-cols-7 mb-1.5">
+          {DAYS_TH.map((d, i) => <div key={d} className={`flex items-center justify-center h-7 text-[11px] font-medium ${
+            i === 0 ? 'text-rose-400 dark:text-rose-300' : i === 6 ? 'text-indigo-400 dark:text-indigo-300' : 'text-gray-400 dark:text-gray-500'
+          }`}>{d}</div>)}</div>
         <div className="grid grid-cols-7">
           {cells.map((c, i) => {
             const date = new Date(y, m, c.d)
             const disabled = isDisabled(c.d)
-            const isStart = isSameDay(date, selStart)
-            const isEnd = isSameDay(date, selEnd)
-            const isRange = inRange(c.d)
-            const isPreview = inPreviewRange(c.d) && !isStart
+            const isStart = !c.other && isSameDay(date, selStart)
+            const isEnd = !c.other && isSameDay(date, selEnd)
+            const isRange = !c.other && inRange(c.d)
+            const isPreview = !c.other && inPreviewRange(c.d) && !isStart
             const isTodayDate = isToday(c.d)
+            const dow = i % 7
             let rangeRound = ''
             if (isRange && selStart && selEnd && selStart.getTime() !== selEnd.getTime() && !c.other) {
               if (isStart && isEnd) rangeRound = 'rounded-lg'
@@ -240,7 +277,9 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
                   isPreview && !isRange ? `bg-brand-50 dark:bg-brand-900/20 ${previewRound}` : ''
                 } ${
                   isStart || isEnd ? 'z-10' : ''
-                } ${disabled ? 'text-gray-200 dark:text-gray-600 cursor-not-allowed hover:bg-transparent' : !c.other ? 'text-gray-700 dark:text-gray-300' : ''}`}>
+                } ${disabled ? 'text-gray-200 dark:text-gray-600 cursor-not-allowed hover:bg-transparent' : !c.other ? (
+                  dow === 0 ? 'text-rose-400 dark:text-rose-300' : dow === 6 ? 'text-indigo-400 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'
+                ) : ''}`}>
                 {isStart && isEnd ? (
                   <span className="w-full h-full flex items-center justify-center bg-brand-600 text-white font-semibold rounded-lg">{c.d}</span>
                 ) : isStart ? (
@@ -273,48 +312,63 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
+      <button type="button" onClick={() => {
+          if (!open) setStep('start')
+          setOpen(!open)
+        }}
         className={`w-full flex items-center gap-3 bg-white dark:bg-gray-800 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
           size === 'lg' ? 'h-12 px-5 text-base' : 'h-12 px-4 text-sm'
         } ${
           open ? 'border-brand-400 ring-2 ring-brand-100' : 'border-gray-200 dark:border-gray-600 hover:border-brand-300'
         } ${selStart ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>
-        <svg className={`shrink-0 ${size === 'lg' ? 'w-5 h-5' : 'w-4 h-4'} ${selStart ? 'text-brand-500' : 'text-gray-400'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-        </svg>
+        <i className={`bx bx-calendar shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} ${selStart ? 'text-brand-500' : 'text-gray-400'}`}></i>
         <span className="flex-1 truncate text-left leading-tight">{displayText}</span>
-        <svg className={`shrink-0 ${size === 'lg' ? 'w-5 h-5' : 'w-4 h-4'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+        <i className={`bx bx-chevron-down shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {open && (
         <>
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 sm:hidden" onClick={() => { setOpen(false); setStep('start') }} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:block sm:p-0">
           <div ref={panelRef} className="
-            fixed inset-x-4 top-[10%] bottom-auto z-50 overflow-y-auto max-h-[80vh]
-            sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:mx-auto sm:w-[640px] sm:block sm:overflow-visible
+            pointer-events-auto w-full max-h-[95vh] overflow-y-auto
+            sm:mx-auto sm:w-[640px] sm:overflow-visible
             bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in
           ">
             <div className="p-4 sm:p-6 w-full">
               <div className="flex items-center justify-between mb-4">
               <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <i className="bx bx-chevron-left text-base"></i>
               </button>
               <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>เช่า {formatDateStr(selStart)}</span> : null}
+                {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
                 {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
                 {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
                 {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
               </div>
               <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                <i className="bx bx-chevron-right text-base"></i>
               </button>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               {renderMonth(vy, vm)}
               {renderMonth(vy, vm + 1)}
             </div>
+            {isMobile && (
+              <button type="button" disabled={!selStart || !selEnd}
+                onClick={confirmRange}
+                className={`w-full mt-4 h-11 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all shadow-md ${
+                  selStart && selEnd
+                    ? 'text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800'
+                    : 'text-gray-400 bg-gray-100 dark:bg-gray-700 cursor-not-allowed'
+                }`}>
+                <i className="bx bx-check text-base"></i>
+                ตกลง
+              </button>
+            )}
           </div>
+        </div>
         </div>
         </>
       )}
@@ -355,12 +409,12 @@ function CarSelect({ value, onChange, options }) {
         ) : (
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" /></svg>
+              <i className="bx bx-car text-base"></i>
             </div>
             <span>— เลือกรถ —</span>
           </div>
         )}
-        <svg className={`w-4 h-4 text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <i className={`bx bx-chevron-down text-base text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {open && (
         <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl overflow-hidden origin-top">
@@ -381,7 +435,7 @@ function CarSelect({ value, onChange, options }) {
                   <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{c.license_plate} · {c.seats} ที่นั่ง</div>
                 </div>
                 {c.id === value && (
-                  <svg className="w-4 h-4 text-brand-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
                 )}
               </button>
             ))}
@@ -428,12 +482,12 @@ function UserSelect({ value, onChange, options }) {
         ) : (
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <i className="bx bx-user text-base"></i>
             </div>
             <span>— เลือกผู้ยืม —</span>
           </div>
         )}
-        <svg className={`w-4 h-4 text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
+        <i className={`bx bx-chevron-down text-base text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {open && (
         <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl overflow-hidden origin-top">
@@ -454,7 +508,7 @@ function UserSelect({ value, onChange, options }) {
                   {u.phone && <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{u.phone}</div>}
                 </div>
                 {u.id === value && (
-                  <svg className="w-4 h-4 text-brand-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
                 )}
               </button>
             ))}
@@ -483,6 +537,16 @@ export default function PublicBooking() {
   const [activeTab, setActiveTab] = useState('cars')
   const [showBookingModal, setShowBookingModal] = useState(false)
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0)
+  const tabBarRef = useRef(null)
+
+  useEffect(() => {
+    if (!tabBarRef.current) return
+    const activeBtn = tabBarRef.current.querySelector('button[data-tab="cars"]')
+    if (activeBtn) {
+      activeBtn.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'instant' })
+    }
+  }, [])
+
   useEffect(() => { fetchUsers() }, [])
 
   async function fetchUsers() {
@@ -565,69 +629,71 @@ export default function PublicBooking() {
 
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950">
-      <header className="relative z-10 flex items-center justify-between px-6 lg:px-12 h-20">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950">
+      <header className="relative z-10 flex items-center justify-center sm:justify-start px-6 lg:px-12 h-20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
+            <i className="bx bxs-zap text-xl text-white"></i>
           </div>
-          <span className="font-heading font-bold text-lg text-gray-900 dark:text-white">ยานพาหนะ</span>
+          <span className="font-heading font-bold text-lg text-gray-900 dark:text-white">วิทยาลัยเทคนิคบุรีรัมย์</span>
         </div>
 
       </header>
 
-      <main className="relative px-6 lg:px-12 pb-20">
-        <div className="max-w-6xl mx-auto">
+      <main className="relative px-6 lg:px-12 pb-20 flex flex-col flex-1">
+        <div className="max-w-6xl mx-auto w-full flex flex-col flex-1">
           <div className="text-center pt-2 pb-6">
             <h1 className="text-4xl lg:text-5xl font-bold font-heading text-gray-900 dark:text-white mb-4">
-              จองรถยนต์{' '}
+              ระบบจอง{' '}
               <span className="text-brand-600">ยานพาหนะ</span>
             </h1>
 
           </div>
 
-          <div className="flex flex-wrap justify-center gap-2 mb-6">
-            <button onClick={() => setActiveTab('cars')}
-              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                activeTab === 'cars'
-                  ? 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800'
-                  : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-100'
-              }`}>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"/></svg>
-              ยานพาหนะ
-            </button>
-            <button onClick={() => setActiveTab('calendar')}
-              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium transition-all duration-200 ${
+          <div ref={tabBarRef} className="flex justify-center gap-2 mb-6 overflow-x-auto scrollbar-none"
+              style={{
+                maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)',
+                WebkitMaskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)',
+              }}>
+            <button onClick={() => setActiveTab('calendar')} data-tab="calendar"
+              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
                 activeTab === 'calendar'
                   ? 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800'
                   : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-100'
               }`}>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              ปฏิทินจองยานพาหนะ
+              <i className="bx bx-calendar text-base"></i>
+              ปฏิทินยานพาหนะ
             </button>
-            <button onClick={() => setActiveTab('lookup')}
-              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium transition-all duration-200 ${
+            <button onClick={() => setActiveTab('cars')} data-tab="cars"
+              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
+                activeTab === 'cars'
+                  ? 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800'
+                  : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-100'
+              }`}>
+              <i className="bx bx-car text-base"></i>
+              ยานพาหนะ
+            </button>
+            <button onClick={() => setActiveTab('lookup')} data-tab="lookup"
+              className={`h-10 px-5 inline-flex items-center gap-2 rounded-full text-sm font-medium whitespace-nowrap transition-all duration-200 ${
                 activeTab === 'lookup'
                   ? 'text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-950/50 border border-brand-200 dark:border-brand-800'
                   : 'text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-900 dark:hover:text-gray-100'
               }`}>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <i className="bx bx-search text-base"></i>
                ติดตามสถานะ
 
             </button>
           </div>
 
           {activeTab === 'cars' && (
-          <section className="mb-16 motion-safe:animate-fade-in">
+          <section className="flex flex-col flex-1 motion-safe:animate-fade-in">
             <div className="text-center mb-6">
               <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">รถยนต์ที่พร้อมใช้งาน</h2>
               <p className="text-gray-500 dark:text-gray-400 mt-1">เลือกวันที่ต้องการใช้งานและยานพาหนะ</p>
             </div>
 
-            <div className="max-w-4xl mx-auto">
-              <div className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-950/50 border border-gray-100 dark:border-gray-700 p-6">
+            <div className="max-w-4xl mx-auto w-full flex flex-col flex-1">
+              <div className={`bg-white dark:bg-gray-800/80 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-950/50 border border-gray-100 dark:border-gray-700 p-6 flex flex-col ${!form.start_date || !form.end_date ? 'flex-1' : ''}`}>
                 <div className="mb-6">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">เลือกวันที่ต้องการใช้งาน</label>
                   <RangeDatePicker startDate={form.start_date} endDate={form.end_date}
@@ -638,11 +704,9 @@ export default function PublicBooking() {
                     min={todayStr()} size="lg" />
                 </div>
                 {!form.start_date || !form.end_date ? (
-                  <div className="text-center py-16 border-t border-gray-100 dark:border-gray-700 pt-8">
+                  <div className="flex-1 flex flex-col items-center justify-center border-t border-gray-100 dark:border-gray-700 pt-8">
                     <div className="w-20 h-20 rounded-2xl bg-brand-50 dark:bg-brand-950/40 flex items-center justify-center mx-auto mb-5">
-                      <svg className="w-10 h-10 text-brand-300 dark:text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-                        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                      </svg>
+                      <i className="bx bx-calendar text-4xl text-brand-300 dark:text-brand-600"></i>
                     </div>
                     <p className="text-gray-400 dark:text-gray-500 text-base">กรุณาเลือกวันที่ต้องการใช้งาน</p>
                     <p className="text-gray-300 dark:text-gray-600 text-sm mt-1">เลือกวันที่เริ่มต้นและสิ้นสุดเพื่อดูรายการรถที่ว่าง</p>
@@ -697,7 +761,7 @@ export default function PublicBooking() {
           {activeTab === 'lookup' && (
           <section className="mb-16 motion-safe:animate-fade-in">
             <div className="text-center mb-8">
-               <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">ติดตามสถานะและประวัติการจองรถ</h2>
+               <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">ติดตามสถานะและประวัติการจอง</h2>
                <p className="text-gray-500 dark:text-gray-400 mt-1">ค้นหาสถานะการจองด้วยชื่อหรือเบอร์โทรศัพท์</p>
 
             </div>
@@ -706,7 +770,7 @@ export default function PublicBooking() {
                 <div className="mb-4">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ชื่อ / เบอร์โทรศัพท์ / เลขบัตรประชาชน</label>
                   <div className="relative">
-                    <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <i className="bx bx-search absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                     <input value={lookupQuery} onChange={e => setLookupQuery(e.target.value)}
                       className="w-full h-11 pl-10 pr-4 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
                       placeholder="ชื่อ, เบอร์โทรศัพท์ หรือเลขบัตรประชาชน" />
@@ -715,9 +779,9 @@ export default function PublicBooking() {
                 <button type="submit" disabled={lookupLoading || !lookupQuery}
                   className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md">
                   {lookupLoading ? (
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    <i className="bx bx-loader-alt text-base animate-spin"></i>
                   ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <i className="bx bx-search text-base"></i>
                   )}
                   <span>{lookupLoading ? 'กำลังค้นหา...' : 'ค้นหา'}</span>
                 </button>
@@ -769,13 +833,13 @@ export default function PublicBooking() {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">จองรถ</h2>
                 <button onClick={() => { if (!loading) { setShowBookingModal(false); setSuccess(false); setError('') } }}
                   className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  <i className="bx bx-x text-xl"></i>
                 </button>
               </div>
               {success ? (
                 <div className="text-center py-12 animate-fade-in">
                   <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-6 animate-scale-in">
-                    <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <i className="bx bx-check-circle text-4xl text-emerald-600 dark:text-emerald-400"></i>
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">ส่งคำขอยืมเรียบร้อย</h2>
                   <p className="text-gray-500 dark:text-gray-400 mb-8">รอการอนุมัติจากผู้ดูแลระบบ</p>
@@ -816,7 +880,7 @@ export default function PublicBooking() {
 
                   {error && (
                     <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2">
-                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <i className="bx bx-error-circle text-base shrink-0"></i>
                       {error}
                     </div>
                   )}
@@ -824,7 +888,7 @@ export default function PublicBooking() {
                   <button type="submit" disabled={loading}
                     className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 active:from-brand-700 active:to-brand-800 shadow-lg shadow-brand-300/40 hover:shadow-xl hover:shadow-brand-400/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                     {loading && (
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      <i className="bx bx-loader-alt text-base animate-spin"></i>
                     )}
                     <span>{loading ? 'กำลังส่ง...' : 'ส่งคำขอยืม'}</span>
                   </button>
