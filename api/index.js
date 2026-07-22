@@ -1,9 +1,8 @@
-import express from 'express'
-
+const express = require('express')
 const app = express()
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-export default app
+module.exports = app
