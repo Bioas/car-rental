@@ -1,11 +1,20 @@
-const express = require('express')
-const app = express()
+const { initDB } = require('./db.cjs')
+const app = require('./server.cjs')
 
-// Test if db.cjs loads
-require('../server/db.cjs')
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', ts: Date.now() })
+// Kick off DB init on cold start — subsequent warm requests reuse the same promise
+const ready = initDB().catch(err => {
+  console.error('DB init failed:', err)
+  throw err
 })
 
-module.exports = app
+module.exports = async (req, res) => {
+  try {
+    await ready
+    app(req, res)
+  } catch (err) {
+    console.error('Handler error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+}
