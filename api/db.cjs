@@ -10,13 +10,21 @@ const DB_PATH = isVercel
 let db = null
 
 async function initDB() {
-  // Help sql.js find its WASM file on Vercel's bundled filesystem
+  // Vercel bundles node_modules inside api/ but may miss WASM binaries.
+  // Try multiple locations for sql-wasm.wasm.
   const sqlJsDir = path.dirname(require.resolve('sql.js'))
   const locateFile = (file) => {
-    // Try dist/ first, then the package root
-    const distPath = path.join(sqlJsDir, 'dist', file)
-    if (fs.existsSync(distPath)) return distPath
-    return path.join(sqlJsDir, file)
+    const candidates = [
+      path.join(sqlJsDir, 'dist', file),
+      path.join(sqlJsDir, file),
+      path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', file),
+      path.join(__dirname, '..', 'node_modules', 'sql.js', file),
+    ]
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p
+    }
+    // Fallback: return the default path (will give a clearer error if missing)
+    return candidates[0]
   }
   const SQL = await initSqlJs({ locateFile })
   if (fs.existsSync(DB_PATH)) {
