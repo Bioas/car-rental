@@ -1,26 +1,20 @@
-const express = require('express')
-const app = express()
+const { initDB } = require('./db.cjs')
+const app = require('./server.cjs')
 
-// Test if db.cjs loads (sql.js, bcryptjs, etc.)
-let dbLoaded = false
-try {
-  require('./db.cjs')
-  dbLoaded = true
-} catch (e) {
-  dbLoaded = false
-}
-
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', ts: Date.now(), dbLoaded })
+// Kick off DB init on cold start
+const ready = initDB().catch(err => {
+  console.error('DB init failed:', err)
+  throw err
 })
 
-const path = require('path')
-app.use((req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
-  } else {
-    res.status(404).json({ error: 'Not found' })
+module.exports = async (req, res) => {
+  try {
+    await ready
+    app(req, res)
+  } catch (err) {
+    console.error('Handler error:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' })
+    }
   }
-})
-
-module.exports = app
+}
