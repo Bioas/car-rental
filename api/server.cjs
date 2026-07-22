@@ -5,7 +5,7 @@ const authRoutes = require('./routes/auth.cjs')
 const carRoutes = require('./routes/cars.cjs')
 const bookingRoutes = require('./routes/bookings.cjs')
 const notificationRoutes = require('./routes/notifications.cjs')
-// const adminRoutes = require('./routes/admin.cjs')  // has multer — test later
+const adminRoutes = require('./routes/admin.cjs')
 const publicRoutes = require('./routes/public.cjs')
 
 const app = express()
@@ -24,7 +24,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/cars', carRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/notifications', notificationRoutes)
-// app.use('/api/admin', adminRoutes)
+app.use('/api/admin', adminRoutes)
 app.use('/api/public', publicRoutes)
 
 app.get('/api/health', (req, res) => {
