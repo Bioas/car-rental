@@ -1,6 +1,7 @@
 import initSqlJs from 'sql.js'
 import fs from 'fs'
 import path from 'path'
+import bcrypt from 'bcryptjs'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -19,7 +20,6 @@ export async function initDB() {
     db = new SQL.Database()
   }
 
-  db.run(`PRAGMA journal_mode=WAL`)
   db.run(`PRAGMA foreign_keys=ON`)
 
   db.run(`
@@ -84,32 +84,6 @@ export async function initDB() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `)
-
-  // Auto-seed on Vercel if empty
-  const userCount = db.exec('SELECT COUNT(*) as c FROM users')[0]?.values[0]?.[0]
-  if (userCount === 0) {
-    const { default: bcrypt } = await import('bcryptjs')
-    const adminPass = await bcrypt.hash('admin123', 10)
-    const userPass = await bcrypt.hash('user123', 10)
-
-    db.run('INSERT INTO users (name, email, password, role, phone) VALUES (?,?,?,?,?)', ['ผู้ดูแลระบบ', 'admin@carrental.local', adminPass, 'admin', '081-000-0000'])
-    db.run('INSERT INTO users (name, email, password, role, phone) VALUES (?,?,?,?,?)', ['สมชาย ใจดี', 'somchai@carrental.local', userPass, 'user', '082-111-1111'])
-
-    const cars = [
-      ['กข 1234', 'Toyota', 'Camry', 'ขาว', 2023, 5, 'รถประจำตำแหน่งผู้บริหาร'],
-      ['กค 5678', 'Honda', 'Civic', 'ดำ', 2022, 5, ''],
-      ['กง 9012', 'Isuzu', 'D-Max', 'เงิน', 2023, 4, 'รถกระบะสำหรับขนของ'],
-      ['กจ 3456', 'Toyota', 'Fortuner', 'ดำ', 2024, 7, 'รถ SUV สำหรับเดินทางไกล'],
-      ['กช 2345', 'Nissan', 'Almera', 'แดง', 2023, 5, 'ประหยัดน้ำมัน'],
-      ['กซ 6789', 'Ford', 'Ranger', 'ขาว', 2022, 5, 'รถกระบะ 4 ประตู'],
-      ['กด 0123', 'MG', 'ZS EV', 'ฟ้า', 2024, 5, 'รถไฟฟ้า'],
-    ]
-    const stmt = db.prepare('INSERT INTO cars (license_plate, brand, model, color, year, seats, notes, status) VALUES (?,?,?,?,?,?,?,?)')
-    for (const c of cars) {
-      stmt.run([...c, 'available'])
-    }
-    stmt.free()
-  }
 
   save()
   return db
