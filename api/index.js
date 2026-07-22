@@ -1,8 +1,19 @@
-const express = require('express')
-const app = express()
+let appPromise = null
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
-})
+async function getApp() {
+  if (!appPromise) {
+    appPromise = (async () => {
+      const mod = await import('../server/index.js')
+      const { initDB } = await import('../server/db.js')
+      await initDB()
+      console.log('DB initialized on Vercel')
+      return mod.default
+    })()
+  }
+  return appPromise
+}
 
-module.exports = app
+module.exports = async (req, res) => {
+  const app = await getApp()
+  app(req, res)
+}
