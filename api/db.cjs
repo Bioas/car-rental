@@ -11,7 +11,7 @@ let db = null
 
 async function initDB() {
   // Vercel bundles node_modules inside api/ but may miss WASM binaries.
-  // Try multiple locations for sql-wasm.wasm.
+  // Try filesystem paths first, then fall back to CDN.
   const sqlJsDir = path.dirname(require.resolve('sql.js'))
   const locateFile = (file) => {
     const candidates = [
@@ -23,8 +23,8 @@ async function initDB() {
     for (const p of candidates) {
       if (fs.existsSync(p)) return p
     }
-    // Fallback: return the default path (will give a clearer error if missing)
-    return candidates[0]
+    // CDN fallback — used on Vercel where WASM isn't bundled
+    return `https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/${file}`
   }
   const SQL = await initSqlJs({ locateFile })
   if (fs.existsSync(DB_PATH)) {
