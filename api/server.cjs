@@ -14,6 +14,21 @@ const PORT = process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
 
+// Lazy DB init middleware — works with Vercel's serverless module.exports pattern
+const { initDB } = require('./db.cjs')
+let dbReady = null
+app.use(async (req, res, next) => {
+  if (!dbReady) dbReady = initDB()
+  try {
+    await dbReady
+    next()
+  } catch (err) {
+    dbReady = null
+    console.error('DB init failed:', err.message)
+    next(err)
+  }
+})
+
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')))
 
 if (process.env.NODE_ENV === 'production') {

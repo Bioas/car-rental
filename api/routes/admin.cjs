@@ -11,8 +11,9 @@ const router = Router()
 
 router.use(authMiddleware, adminMiddleware)
 
+const isVercel = process.env.VERCEL
 const storage = multer.diskStorage({
-  destination: path.join(__dirname, '..', '..', 'uploads'),
+  destination: isVercel ? '/tmp' : path.join(__dirname, '..', '..', 'uploads'),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname)
     cb(null, `${uuidv4()}${ext}`)
