@@ -10,23 +10,28 @@ const DB_PATH = isVercel
 let db = null
 
 async function initDB() {
-  // Vercel bundles node_modules inside api/ but may miss WASM binaries.
-  // Try filesystem paths first, then fall back to CDN.
-  const sqlJsDir = path.dirname(require.resolve('sql.js'))
-  const locateFile = (file) => {
+  const CDN = 'https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/sql-wasm.wasm'
+  let wasmBinary = undefined
+  if (isVercel) {
+    // Vercel doesn't bundle .wasm files, fetch from CDN as binary
+    const resp = await fetch(CDN)
+    wasmBinary = new Uint8Array(await resp.arrayBuffer())
+  } else {
+    // Local dev — read WASM from filesystem
+    const sqlJsDir = path.dirname(require.resolve('sql.js'))
     const candidates = [
-      path.join(sqlJsDir, 'dist', file),
-      path.join(sqlJsDir, file),
-      path.join(__dirname, '..', 'node_modules', 'sql.js', 'dist', file),
-      path.join(__dirname, '..', 'node_modules', 'sql.js', file),
+      path.join(sqlJsDir, 'dist', 'sql-wasm.wasm'),
+      path.join(sqlJsDir, 'sql-wasm.wasm'),
     ]
     for (const p of candidates) {
-      if (fs.existsSync(p)) return p
+      if (fs.existsSync(p)) { wasmBinary = fs.readFileSync(p); break }
     }
-    // CDN fallback — used on Vercel where WASM isn't bundled
-    return `https://cdn.jsdelivr.net/npm/sql.js@1.14.1/dist/${file}`
+    if (!wasmBinary) {
+      const resp = await fetch(CDN)
+      wasmBinary = new Uint8Array(await resp.arrayBuffer())
+    }
   }
-  const SQL = await initSqlJs({ locateFile })
+  const SQL = await initSqlJs({ wasmBinary })
   if (fs.existsSync(DB_PATH)) {
     const buffer = fs.readFileSync(DB_PATH)
     db = new SQL.Database(buffer)
