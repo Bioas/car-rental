@@ -18,14 +18,17 @@ app.use(express.json())
 const { initDB } = require('./db.cjs')
 let dbReady = null
 app.use(async (req, res, next) => {
-  if (!dbReady) dbReady = initDB()
+  if (!dbReady) {
+    console.log('Starting DB init...')
+    dbReady = initDB()
+  }
   try {
     await dbReady
     next()
   } catch (err) {
     dbReady = null
-    console.error('DB init failed:', err.message)
-    next(err)
+    console.error('DB init failed:', err && (err.message || err))
+    return res.status(500).json({ error: 'DB init failed', detail: err && err.message })
   }
 })
 
