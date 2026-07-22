@@ -348,6 +348,7 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
                   {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
                   {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
                   {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
+                  {selStart && selEnd ? <span className="text-gray-400 font-medium">({Math.round((selEnd - selStart) / (1000 * 60 * 60 * 24)) + 1} วัน)</span> : null}
                   {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
                 </div>
                 <div className="overflow-y-auto max-h-[55vh] scrollbar-none">
@@ -369,6 +370,7 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
                     {selStart ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>ยืม {formatDateStr(selStart)}</span> : null}
                     {selStart && selEnd ? <span className="text-gray-300">|</span> : null}
                     {selEnd ? <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-brand-600"/>คืน {formatDateStr(selEnd)}</span> : null}
+                    {selStart && selEnd ? <span className="text-gray-400 font-medium">({Math.round((selEnd - selStart) / (1000 * 60 * 60 * 24)) + 1} วัน)</span> : null}
                     {!selStart ? <span>เลือกวันเริ่มต้น</span> : !selEnd ? <span className="text-amber-500">เลือกวันคืนรถ</span> : null}
                   </div>
                   <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
