@@ -7,7 +7,7 @@ const colors = {
   red: { bg: 'bg-red-600', icon: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' },
 }
 
-export function StatCard({ title, value, color = 'brand', children }) {
+export const StatCard = React.memo(function StatCard({ title, value, color = 'brand', children }) {
   const c = colors[color] || colors.brand
 
   return (
@@ -24,4 +24,4 @@ export function StatCard({ title, value, color = 'brand', children }) {
       </div>
     </div>
   )
-}
+})

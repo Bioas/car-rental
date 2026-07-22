@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
-import CalendarPage from './CalendarPage'
+
+const CalendarPage = React.lazy(() => import('./CalendarPage'))
 
 const STATUS_COLORS = { pending: '#f59e0b', approved: '#10b981', rejected: '#ef4444', returned: '#3b82f6' }
 
@@ -18,7 +19,10 @@ function todayStr() {
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640)
   useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 640)
+    const handler = () => {
+      const v = window.innerWidth < 640
+      setIsMobile(prev => prev !== v ? v : prev)
+    }
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
@@ -183,6 +187,15 @@ function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [open])
 
   const selStart = startDate ? new Date(startDate + 'T00:00:00') : null
   const selEnd = endDate ? new Date(endDate + 'T00:00:00') : null
@@ -578,6 +591,15 @@ export default function PublicBooking() {
 
   useEffect(() => { fetchUsers() }, [])
 
+  useEffect(() => {
+    if (showBookingModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [showBookingModal])
+
   async function fetchUsers() {
     try {
       const res = await fetch('/api/public/users')
@@ -783,7 +805,9 @@ export default function PublicBooking() {
               <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">ปฏิทินจองยานพาหนะ</h2>
               <p className="text-gray-500 dark:text-gray-400 mt-1">ดูภาพรวมการจองยานพาหนะ</p>
             </div>
-            <CalendarPage publicMode onDateClick={(dateStr, carId) => { updateForm('start_date', dateStr); setShowBookingModal(true) }} refreshKey={calendarRefreshKey} />
+            <React.Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400"><i className="bx bx-loader-alt text-2xl animate-spin"></i></div>}>
+              <CalendarPage publicMode onDateClick={(dateStr, carId) => { updateForm('start_date', dateStr); setShowBookingModal(true) }} refreshKey={calendarRefreshKey} />
+            </React.Suspense>
           </section>
           )}
 

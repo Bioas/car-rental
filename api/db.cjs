@@ -172,8 +172,9 @@ function insert(table, data) {
   const values = Object.values(data)
   const placeholders = keys.map(() => '?').join(', ')
   const cols = keys.join(', ')
-  run(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`, values)
+  db.run(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`, values)
   const result = get('SELECT last_insert_rowid() as id')
+  save()
   return result ? result.id : null
 }
 

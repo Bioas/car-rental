@@ -1,25 +1,11 @@
 const { Router } = require('express')
 const bcrypt = require('bcryptjs')
-const multer = require('multer')
-const path = require('path')
-const crypto = require('crypto')
-const uuidv4 = () => crypto.randomUUID()
 const { all, get, insert, update, run } = require('../db.cjs')
 const { authMiddleware, adminMiddleware } = require('../middleware/auth.cjs')
 
 const router = Router()
 
 router.use(authMiddleware, adminMiddleware)
-
-const isVercel = process.env.VERCEL
-const storage = multer.diskStorage({
-  destination: isVercel ? '/tmp' : path.join(__dirname, '..', '..', 'uploads'),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname)
-    cb(null, `${uuidv4()}${ext}`)
-  }
-})
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } })
 
 // ─── CARS ───
 
@@ -32,7 +18,7 @@ router.get('/cars', (req, res) => {
   }
 })
 
-router.post('/cars', upload.single('image'), (req, res) => {
+router.post('/cars', (req, res) => {
   try {
     const { license_plate, brand, model, color, year, seats, status, notes } = req.body
     if (!license_plate || !brand || !model) {
@@ -45,7 +31,6 @@ router.post('/cars', upload.single('image'), (req, res) => {
     }
 
     const data = { license_plate, brand, model, color: color || '', year: year || null, seats: seats || 4, status: status || 'available', notes: notes || '' }
-    if (req.file) data.image = '/uploads/' + req.file.filename
 
     const id = insert('cars', data)
     const car = get('SELECT * FROM cars WHERE id = ?', [id])
@@ -55,7 +40,7 @@ router.post('/cars', upload.single('image'), (req, res) => {
   }
 })
 
-router.put('/cars/:id', upload.single('image'), (req, res) => {
+router.put('/cars/:id', (req, res) => {
   try {
     const car = get('SELECT * FROM cars WHERE id = ?', [req.params.id])
     if (!car) return res.status(404).json({ error: 'ไม่พบรถยนต์' })
@@ -70,7 +55,6 @@ router.put('/cars/:id', upload.single('image'), (req, res) => {
     if (seats !== undefined) data.seats = seats
     if (status) data.status = status
     if (notes !== undefined) data.notes = notes
-    if (req.file) data.image = '/uploads/' + req.file.filename
 
     update('cars', data, 'id', req.params.id)
     const updated = get('SELECT * FROM cars WHERE id = ?', [req.params.id])

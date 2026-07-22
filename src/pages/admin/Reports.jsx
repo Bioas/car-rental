@@ -36,7 +36,6 @@ export default function Reports() {
         const data = await res.json()
         setStats(data.stats)
         setBookingsByCar(data.bookingsByCar)
-        setBookingsByMonth(bookingsByMonth)
         setTopUsers(data.topUsers)
         if (data.bookingsByCar?.length > 0) {
           setMaxCount(Math.max(...data.bookingsByCar.map(c => c.count), 1))

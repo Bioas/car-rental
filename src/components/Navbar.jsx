@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { timeAgo } from '../lib/constants'
 
@@ -17,6 +17,7 @@ function getNotifType(type) {
 export function Navbar() {
   const { sidebarOpen, toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, isAdmin, logout, authHeaders } = useApp()
   const location = useLocation()
+  const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showNotifDropdown, setShowNotifDropdown] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -60,19 +61,26 @@ export function Navbar() {
     return notifications.filter(n => !n.is_read).length
   }
 
-  async function markRead(id) {
-    try {
-      const res = await fetch(`/api/notifications/${id}/read`, {
-        method: 'PUT',
-        headers: authHeaders()
-      })
-      if (res.ok) {
-        setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
+  function notifLink(n) {
+    if (n.related_type === 'booking') return '/app/bookings'
+    return null
+  }
+
+  async function handleClickNotif(n) {
+    setShowNotifDropdown(false)
+    if (!n.is_read) {
+      try {
+        await fetch(`/api/notifications/${n.id}/read`, {
+          method: 'PUT',
+          headers: authHeaders()
+        })
         setNotificationCount(prev => Math.max(0, prev - 1))
+      } catch (e) {
+        console.error(e)
       }
-    } catch (e) {
-      console.error(e)
     }
+    const link = notifLink(n)
+    if (link) navigate(link)
   }
 
   async function readAll() {
@@ -155,14 +163,15 @@ export function Navbar() {
                   notifications.slice(0, 6).map(n => {
                     const t = getNotifType(n.type)
                     const isUnread = !n.is_read
+                    const linkTo = notifLink(n)
                     return (
-                      <div
+                      <button
                         key={n.id}
-                        onClick={() => isUnread && markRead(n.id)}
-                        className={`flex items-start gap-3 px-4 py-3 transition-colors
+                        onClick={() => handleClickNotif(n)}
+                        className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors
                           ${isUnread
-                            ? 'cursor-pointer bg-brand-50/40 dark:bg-brand-900/10 hover:bg-brand-50/60 dark:hover:bg-brand-900/20'
-                            : 'cursor-default hover:bg-gray-50 dark:hover:bg-gray-800/30'
+                            ? 'bg-brand-50/40 dark:bg-brand-900/10 hover:bg-brand-50/60 dark:hover:bg-brand-900/20'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'
                           }`}
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${t.color}`}>
@@ -177,11 +186,14 @@ export function Navbar() {
                             <span className="text-[10px] text-gray-400 dark:text-gray-500">{timeAgo(n.created_at)}</span>
                           </div>
                           <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">{n.message}</p>
+                          {linkTo && (
+                            <span className="inline-block mt-1.5 text-xs text-brand-600 dark:text-brand-400 font-medium">ดูรายละเอียด →</span>
+                          )}
                         </div>
                         {isUnread && (
                           <div className="w-2 h-2 rounded-full bg-brand-500 dark:bg-brand-400 flex-shrink-0 mt-1.5" />
                         )}
-                      </div>
+                      </button>
                     )
                   })
                 ) : (
