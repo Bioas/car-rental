@@ -1,12 +1,11 @@
 const express = require('express')
 const cors = require('cors')
 const path = require('path')
-const { initDB } = require('./db.cjs')
 const authRoutes = require('./routes/auth.cjs')
 const carRoutes = require('./routes/cars.cjs')
 const bookingRoutes = require('./routes/bookings.cjs')
 const notificationRoutes = require('./routes/notifications.cjs')
-const adminRoutes = require('./routes/admin.cjs')
+// const adminRoutes = require('./routes/admin.cjs')  // has multer — test later
 const publicRoutes = require('./routes/public.cjs')
 
 const app = express()
@@ -25,7 +24,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/cars', carRoutes)
 app.use('/api/bookings', bookingRoutes)
 app.use('/api/notifications', notificationRoutes)
-app.use('/api/admin', adminRoutes)
+// app.use('/api/admin', adminRoutes)
 app.use('/api/public', publicRoutes)
 
 app.get('/api/health', (req, res) => {
@@ -45,6 +44,7 @@ if (process.env.NODE_ENV === 'production') {
 module.exports = app
 
 async function start() {
+  const { initDB } = require('./db.cjs')
   await initDB()
   console.log('Database initialized')
   app.listen(PORT, () => {
