@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 const AppContext = createContext(null)
@@ -18,6 +18,10 @@ export function AppProvider({ children }) {
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationCount, setNotificationCount] = useState(0)
+  const [refreshSignal, setRefreshSignal] = useState(0)
+  const [globalToast, setGlobalToast] = useState(null)
+  const [sseConnected, setSseConnected] = useState(false)
+  const eventSourceRef = useRef(null)
 
   const isLoggedIn = !!token
   const isAdmin = user?.role === 'admin'
@@ -100,6 +104,26 @@ export function AppProvider({ children }) {
     navigate('/login')
   }, [navigate])
 
+  const connectSSE = useCallback(() => {
+    const t = localStorage.getItem('token')
+    if (!t) return
+    if (eventSourceRef.current) eventSourceRef.current.close()
+    const es = new EventSource(`${API}/events?token=${encodeURIComponent(t)}`)
+    es.onopen = () => setSseConnected(true)
+    es.addEventListener('data-changed', (e) => {
+      setRefreshSignal(prev => prev + 1)
+      fetchNotificationCount()
+      try {
+        const data = JSON.parse(e.data)
+        if (data.action === 'new-booking') {
+          setGlobalToast({ type: 'new-booking', submessage: 'มีคำขอยืมรถใหม่', message: data.user_name && data.car_brand ? `${data.user_name} — ${data.car_brand} ${data.car_model}` : 'คลิกเพื่อดูรายละเอียด' })
+        }
+      } catch {}
+    })
+    es.onerror = () => setSseConnected(false)
+    eventSourceRef.current = es
+  }, [])
+
   const fetchNotificationCount = useCallback(async () => {
     try {
       const t = localStorage.getItem('token')
@@ -114,6 +138,32 @@ export function AppProvider({ children }) {
     } catch {}
   }, [])
 
+  // Listen for cross-tab token changes (sync localStorage across tabs)
+  useEffect(() => {
+    function handleStorage(e) {
+      if (e.key === 'token') {
+        setToken(e.newValue || '')
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
+  // SSE connection — auto-reconnects when token changes (login/logout/refresh/cross-tab)
+  useEffect(() => {
+    if (!token) return
+
+    connectSSE()
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+      setSseConnected(false)
+    }
+  }, [token])
+
   useEffect(() => {
     if (isLoggedIn) {
       fetchUser()
@@ -122,9 +172,10 @@ export function AppProvider({ children }) {
   }, [])
 
   const value = {
-    user, token, isLoggedIn, isAdmin, userLoaded,
-    darkMode, sidebarOpen, notificationCount,
-    setNotificationCount,
+    user, token, isLoggedIn, isAdmin, userLoaded, sseConnected,
+    darkMode, sidebarOpen, notificationCount, refreshSignal,
+    globalToast, setGlobalToast,
+    setNotificationCount, connectSSE,
     login, register, fetchUser, logout,
     toggleDark, toggleSidebar, fetchNotificationCount,
     authHeaders,

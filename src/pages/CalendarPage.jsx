@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { STATUS_COLORS, statusLabel, todayStr } from '../lib/constants'
 import { BookingModal } from '../components/BookingModal'
+import BookingDetailModal from '../components/BookingDetailModal'
+import { Toast } from '../components/ui/toast'
+import { CalendarMonthGrid } from '../components/CalendarMonthGrid'
 import '../styles/calendar-overrides.css'
 
 const THAI_MONTHS = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
@@ -23,11 +26,6 @@ function fmtThai(d) {
 export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const { authHeaders, isAdmin, fetchNotificationCount } = useApp()
   const canManageBookings = isAdmin && !publicMode
-  const [FullCal, setFullCal] = useState(null)
-  const [plugins, setPlugins] = useState([])
-  const [locale, setLocale] = useState(null)
-  const [loaded, setLoaded] = useState(false)
-  const [events, setEvents] = useState([])
   const [rawBookings, setRawBookings] = useState([])
   const [cars, setCars] = useState([])
   const [bookingOpen, setBookingOpen] = useState(false)
@@ -35,37 +33,10 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const [bookingCarId, setBookingCarId] = useState(null)
   const [detailBooking, setDetailBooking] = useState(null)
   const [rejectModal, setRejectModal] = useState({ open: false, reason: '' })
+  const [toast, setToast] = useState(null)
   const [viewMode, setViewMode] = useState('week')
   const [viewDate, setViewDate] = useState(new Date())
-  const calendarRef = useRef(null)
   const weekContainerRef = useRef(null)
-  const fcContainerRef = useRef(null)
-  const [calHeight, setCalHeight] = useState(600)
-
-  useEffect(() => {
-    if (viewMode !== 'month' || !fcContainerRef.current) return
-    const el = fcContainerRef.current
-    const ro = new ResizeObserver(([entry]) => {
-      const h = Math.floor(entry.contentRect.height)
-      if (h > 0) setCalHeight(h)
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [viewMode, loaded])
-
-  useEffect(() => {
-    Promise.all([
-      import('@fullcalendar/react'),
-      import('@fullcalendar/daygrid'),
-      import('@fullcalendar/interaction'),
-      import('@fullcalendar/core/locales/th'),
-    ]).then(([fc, dg, ip, th]) => {
-      setFullCal(() => fc.default)
-      setPlugins([dg.default, ip.default])
-      setLocale(() => th.default)
-      setLoaded(true)
-    })
-  }, [])
 
   useEffect(() => {
     fetchData()
@@ -169,24 +140,6 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       if (bookingsRes.ok) {
         const d = await bookingsRes.json()
         setRawBookings(d.bookings)
-        setEvents(d.bookings.map(b => {
-          const endDate = new Date(b.end_date)
-          endDate.setDate(endDate.getDate() + 1)
-          const USER_PALETTE = ['#2563eb','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16','#3b82f6','#d946ef','#22c55e','#eab308','#0ea5e9','#a855f7','#fb923c','#2dd4bf','#f472b6','#38bdf8']
-          const eventColor = publicMode
-            ? USER_PALETTE[b.user_id % USER_PALETTE.length]
-            : STATUS_COLORS[b.status] || '#6b7280'
-          return {
-            id: String(b.id),
-            title: `${b.brand} ${b.model} - ${b.user_name}`,
-            start: b.start_date,
-            end: endDate.toLocaleDateString('en-CA'),
-            allDay: true,
-            backgroundColor: eventColor,
-            borderColor: eventColor,
-            textColor: '#ffffff',
-          }
-        }))
       }
     } catch (e) {
       console.error(e)
@@ -208,13 +161,12 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     return ''
   }, [viewMode, weekDays, viewDate])
 
-  function handleDatesSet(arg) {
-    setViewDate(arg.view.currentStart)
-  }
-
   function handlePrev() {
-    if (viewMode === 'month' && calendarRef.current) {
-      calendarRef.current.getApi().prev()
+    if (viewMode === 'month') {
+      const d = new Date(viewDate)
+      d.setDate(1) // anchor to day 1 so setMonth doesn't skip months at month-end boundaries
+      d.setMonth(d.getMonth() - 1)
+      setViewDate(d)
     } else if (viewMode === 'week') {
       const d = new Date(viewDate)
       d.setDate(d.getDate() - 7)
@@ -223,8 +175,11 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   }
 
   function handleNext() {
-    if (viewMode === 'month' && calendarRef.current) {
-      calendarRef.current.getApi().next()
+    if (viewMode === 'month') {
+      const d = new Date(viewDate)
+      d.setDate(1)
+      d.setMonth(d.getMonth() + 1)
+      setViewDate(d)
     } else if (viewMode === 'week') {
       const d = new Date(viewDate)
       d.setDate(d.getDate() + 7)
@@ -233,11 +188,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   }
 
   function handleToday() {
-    if (viewMode === 'month' && calendarRef.current) {
-      calendarRef.current.getApi().today()
-    } else if (viewMode === 'week') {
-      setViewDate(new Date())
-    }
+    setViewDate(new Date())
   }
 
   function switchView(mode) {
@@ -255,35 +206,96 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     setBookingOpen(true)
   }
 
+  // Bar bg color policy: a PER-USER deterministic hash picks one of 16
+  // distinguishable PASTEL hues (userId % 16 keeps the same color across
+  // all of one user's bookings). The bar bg therefore encodes "WHO owns
+  // the booking", while the left stripe + trailing badge on each bar
+  // encode "WHAT status the booking is in" via STATUS_COLORS[status].
+  // Decoupling those two channels lets the badge/stripe be visually
+  // distinct from the bar bg WITHOUT requiring the previous inset-ring
+  // / 8px-glow workarounds for "same-color same-hue" clashes. Per user
+  // feedback: "ปรับระบบการสุ่มสี bar มาไม่ให้ใช้สีเดียวกันกับสีของ badge
+  // ที่มีอยู่ตอนนี้" / "ขอ bar เป็น pastel color" — the pre-existing
+  // random palette was scoped to publicMode only; we now apply it across
+  // admin + public alike AND use soft pastel rather than fully-saturated
+  // hues. Falls back to status color (then neutral gray) only when
+  // userId is missing — e.g. legacy rows or test fixtures without a
+  // user reference.
   function bookingBarColor(status, userId) {
-    if (publicMode && userId) {
-      const colors = ['#2563eb','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4','#84cc16','#3b82f6','#d946ef','#22c55e','#eab308','#0ea5e9','#a855f7','#fb923c','#2dd4bf','#f472b6','#38bdf8']
+    if (userId) {
+      // Curated 16-color PASTEL palette (Tailwind 300-400 levels). The
+      // previous saturated palette had EXACT hex matches against
+      // STATUS_COLORS at index 1 (#f59e0b amber = STATUS_COLORS.pending)
+      // and index 2 (#10b981 emerald = STATUS_COLORS.approved), so
+      // user_id=2 (= สมชาย in seed data) with an approved booking
+      // rendered as uniform green. The user reported "ยังเห็นเป็นสี
+      // เขียวอยู่" — that exact-hue collision was the cause. Pastel
+      // hexes are inherently lighter (lightness 70-85%) so they don't
+      // share the perceptual identity of fully-saturated status colors
+      // even within the same hue family — e.g. pink-400 #f472b6 reads
+      // as soft rose vs rejected red #ef4444 which reads as hot
+      // crimson. White label text contrast is preserved via a stronger
+      // textShadow (replacing drop-shadow-sm on label spans), since
+      // drop-shadow is too subtle on light pastel backgrounds.
+      const colors = [
+        '#f472b6', // pink-400 (pastel)
+        '#e879f9', // fuchsia-400 (pastel)
+        '#a78bfa', // violet-400 (pastel)
+        '#c084fc', // purple-400 (pastel)
+        '#c4b5fd', // violet-300 (light pastel)
+        '#f0abfc', // fuchsia-300 (light pastel)
+        '#fda4af', // rose-300 (light pastel — visually distinct from saturated rejected)
+        '#bef264', // lime-400 (pastel — distinct hue from emerald 160°)
+        '#67e8f9', // cyan-300 (pastel — distinct hue from emerald+blue)
+        '#22d3ee', // cyan-400 (pastel)
+        '#a5f3fc', // cyan-200 (very light cyan — kept for variety)
+        '#7dd3fc', // sky-300 (light pastel — distant from blue 217°)
+        '#fb7185', // rose-400 (replaces ultra-light violet-200)
+        '#d8b4fe', // purple-300 (light pastel)
+        '#fdba74', // orange-300 (light pastel accent — replaces pale pink-100)
+        '#fb923c', // orange-400 (pastel orange — distinct from saturated pending amber)
+      ]
       return colors[userId % colors.length]
     }
     return STATUS_COLORS[status] || '#6b7280'
   }
 
   async function adminApprove(id) {
-    await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
+    const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }))
+      setToast({ type: 'error', submessage: d.error || 'อนุมัติไม่สำเร็จ' })
+      return
+    }
     fetchData()
     fetchNotificationCount()
     setDetailBooking(null)
   }
 
   async function adminReject() {
-    await fetch(`/api/admin/bookings/${detailBooking.id}/reject`, {
+    const res = await fetch(`/api/admin/bookings/${detailBooking.id}/reject`, {
       method: 'PUT',
       headers: { ...authHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ admin_notes: rejectModal.reason }),
     })
     setRejectModal({ open: false, reason: '' })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }))
+      setToast({ type: 'error', submessage: d.error || 'ปฏิเสธไม่สำเร็จ' })
+      return
+    }
     fetchData()
     fetchNotificationCount()
     setDetailBooking(null)
   }
 
   async function adminReturn(id) {
-    await fetch(`/api/admin/bookings/${id}/return`, { method: 'PUT', headers: authHeaders() })
+    const res = await fetch(`/api/admin/bookings/${id}/return`, { method: 'PUT', headers: authHeaders() })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }))
+      setToast({ type: 'error', submessage: d.error || 'คืนรถไม่สำเร็จ' })
+      return
+    }
     fetchData()
     fetchNotificationCount()
     setDetailBooking(null)
@@ -310,7 +322,16 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       )}
 
       <div className="card overflow-hidden flex flex-col flex-1">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-4 border-b border-neutral-100 dark:border-gray-700 shrink-0">
+        {/* Header bar — `justify-between` removed: prior layout pushed
+            a "X คัน • Y การจอง" counter block to the right. With that
+            counter gone (per user feedback "ใน week view ไม่ต้องใส่
+            ข้อความบอก 8 คัน 7 การจอง ที่ด้านบนมุมขวามา") the right
+            cluster is empty on both week and month views, so the
+            justify rule is now a no-op. Left cluster (nav arrows +
+            title + seg-week/seg-month toggle) sits at flex-start
+            identical to before — no visual change, just dead-code
+            cleanup. */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-4 border-b border-neutral-100 dark:border-gray-700 shrink-0">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
             <div className="flex items-center gap-0.5 sm:gap-1">
               <button onClick={handlePrev}
@@ -336,42 +357,24 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
               </button>
             </div>
           </div>
-          {viewMode === 'week' && weekDays.length > 0 && (
-            <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-neutral-400">
-              <span>{visibleCars.length} คัน</span>
-              <span className="w-1 h-1 rounded-full bg-neutral-300" />
-              <span>{rawBookings.length} การจอง</span>
-            </div>
-          )}
+          {/* Counter block ("X คัน • Y การจอง") removed per user
+              feedback — admin counts visible from row labels +
+              bars themselves. visibleCars/rawBookings state still
+              computed; only the human-facing display is gone. */}
         </div>
 
-        {viewMode === 'month' && (!loaded || !FullCal ? (
-          <div className="flex items-center justify-center flex-1">
-            <i className="bx bx-loader-alt text-3xl animate-spin text-brand-600"></i>
-          </div>
-        ) : (
-          <div ref={fcContainerRef} className="fc-custom p-3 sm:p-4 flex flex-col flex-1 min-h-0 month-view-enter">
-            <FullCal
-              ref={calendarRef}
-              plugins={plugins}
-              initialView="dayGridMonth"
-              firstDay={1}
-              locale={locale}
-              height={Math.max(300, calHeight)}
-              expandRows={true}
-              dayMaxEvents={false}
-              headerToolbar={false}
-              events={events}
-              datesSet={handleDatesSet}
-              dateClick={(info) => openBooking(info.dateStr, null)}
-              eventClick={(info) => {
-                const b = rawBookings.find(r => String(r.id) === info.event.id)
-                if (b) setDetailBooking(b)
-              }}
-              fixedWeekCount={false}
+        {viewMode === 'month' && (
+          <div className="p-2 sm:p-3 flex-1 min-h-0 flex">
+            <CalendarMonthGrid
+              viewDate={viewDate}
+              rawBookings={rawBookings}
+              bookingBarColor={bookingBarColor}
+              statusLabel={statusLabel}
+              onCellClick={openBooking}
+              onBarClick={(b) => setDetailBooking(prev => (prev && prev.id === b.id ? prev : b))}
             />
           </div>
-        ))}
+        )}
 
         {viewMode === 'week' && (
           <div ref={weekContainerRef} className="overflow-x-auto flex-1 min-h-[400px] flex flex-col week-view-enter">
@@ -423,10 +426,35 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                           {bars.map((b, bi) => {
                             const bgColor = bookingBarColor(b.status, b.user_id)
                             const gapPx = (maxTracks - 1) * 4
+                            // Solid hex from STATUS_COLORS so admins can scan
+                            // status visually at a glance across the row,
+                            // independent of the (per-user pastel) bar bg.
+                            // STATUS_COLORS lives in src/lib/constants.js and
+                            // is the same map used by month-view's leading
+                            // stripe + trailing badge + bookings table
+                            // status chips — keeping the entire app's status
+                            // palette identical. Fallback to the bar's own
+                            // bgColor (then neutral gray) if a future status
+                            // isn't registered in the map, so the stripe
+                            // remains readable rather than disappearing.
+                            // Solid hex from STATUS_COLORS so admins can scan
+                            // status visually at a glance across the row,
+                            // independent of the (per-user pastel) bar bg.
+                            // Fallback is neutral gray ONLY — falling back
+                            // to bgColor would re-introduce the exact
+                            // same-color collision bug the user flagged
+                            // previously ("ปรับระบบการสุ่มสี bar มาไม่ให้
+                            // ใช้สีเดียวกันกับสีของ badge ที่มีอยู่ตอนนี้"):
+                            // a stripe in the SAME hue as the bar fill
+                            // loses its discriminator role. Gray is fine
+                            // because the fallback path is unreachable for
+                            // any status registered in STATUS_COLORS
+                            // (pending/approved/rejected/cancelled/returned).
+                            const statusColor = STATUS_COLORS[b.status] || '#6b7280'
                             return (
                               <div key={b.id}
-                                onClick={() => setDetailBooking(b)}
-                                className="absolute rounded flex items-center justify-between px-2 cursor-pointer transition-all overflow-hidden z-20 border border-white/20 week-booking-bar"
+                                onClick={() => setDetailBooking(prev => (prev && prev.id === b.id ? prev : b))}
+                                className="absolute rounded flex items-center gap-1.5 px-2 cursor-pointer transition-all overflow-hidden z-20 border border-white/20 week-booking-bar"
                                 style={{
                                   '--delay': `${bi * 0.08}s`,
                                   left: b.barLeftPct + '%',
@@ -435,8 +463,71 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                                   height: maxTracks > 1 ? `calc((100% - ${gapPx}px) / ${maxTracks})` : 'calc(100% - 4px)',
                                   backgroundColor: bgColor,
                                 }}>
-                                <span className="truncate text-xs font-medium text-white drop-shadow-sm">{b.user_name}</span>
-                                <span className="shrink-0 text-[9px] font-medium text-white/80 ml-1">{statusLabel(b.status)}</span>
+                                {/* HORIZONTAL-TOP STATUS ACCENT — mirrors the
+                                    BookingDetailModal popup's pattern
+                                    (`Status accent bar` in
+                                    src/components/BookingDetailModal.jsx):
+                                    a 3px-tall, full-width, solid-status-color
+                                    stripe at the very top of the card.
+                                    Chosen over the previous vertical-left
+                                    stripe with 8px glow halo per user
+                                    feedback "ถ้าเป็นแทบยาวแนวนอนไว้
+                                    ด้านบนจะสวยกว่าไหม เหมือนแทบในหน้า
+                                    popup รายละเอียดการจอง" — a horizontal
+                                    top accent gives week-view bars + popup
+                                    modal the SAME visual status vocabulary
+                                    so admins see the same 3px color edge
+                                    whether scanning the calendar or
+                                    reviewing detail. No glow halo here
+                                    because the popup modal also has none;
+                                    the parity is the point. Renders as a
+                                    positioned-absolute child of the bar
+                                    (which itself is `position: absolute`,
+                                    so it acts as the containing block) so
+                                    the accent OVERLAYS the top without
+                                    stealing 3px of flex content area. The
+                                    bar's `rounded` + `overflow-hidden`
+                                    clips the accent's top corners to the
+                                    bar's border radius for visual cohesion
+                                    (the accent doesn't need its own
+                                    rounded-t utility since the parent
+                                    already rounds + clips it).
+                                    Solid STATUS_COLORS bg only (no
+                                    boxShadow halo) — the previous 8px glow
+                                    on the vertical-stripe design was the
+                                    one piece that diverged from the popup
+                                    pattern and the user explicitly wants
+                                    the popup feel. Status word text on AT
+                                    /keyboard is still anchored to the
+                                    trailing badge below, plus the title
+                                    attr surfaces the status word on
+                                    hover for screen-reader fallback on
+                                    cross-row end segments. Visible on ALL
+                                    viewports including mobile (`block`,
+                                    no `hidden sm:block`) so mobile parity
+                                    with month view holds. */}
+                                <div
+                                  className="cal-week-bar-accent absolute top-0 left-0 right-0 h-[3px] block"
+                                  style={{
+                                    backgroundColor: statusColor,
+                                  }}
+                                  title={statusLabel(b.status)}
+                                />
+                                <span className="cal-bar-label min-w-0 truncate text-xs font-medium text-white flex-1">{b.user_name}</span>
+                                {/* TRAILING STATUS WORD — desktop only. Hidden
+                                    below sm (640px) because the top 3px
+                                    status accent already encodes status via
+                                    STATUS_COLORS[status], so the keyword is
+                                    redundant on mobile. Mirrors month
+                                    view's MOBILE-NO-BADGE decision (where
+                                    the trailing colored chip is sr-only on
+                                    mobile). On desktop, the accent AND the
+                                    word give admins a dual-channel status
+                                    cue (color + text) for accessibility +
+                                    glance-readability. whitespace-nowrap
+                                    keeps "อนุมัติแล้ว" on one line so the
+                                    trailing right edge feels anchored. */}
+                                <span className="cal-bar-label hidden sm:inline shrink-0 text-[9px] font-medium text-white/80 whitespace-nowrap">{statusLabel(b.status)}</span>
                               </div>
                             )
                           })}
@@ -464,88 +555,20 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       />
       )}
 
-      {detailBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => setDetailBooking(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-gray-700 w-full max-w-sm overflow-hidden animate-fade-in"
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-100 dark:border-gray-700">
-              <h3 className="font-bold text-neutral-800 dark:text-white text-base">รายละเอียดการจอง</h3>
-              <button onClick={() => setDetailBooking(null)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-600 transition-colors">
-                <i className="bx bx-x text-base"></i>
-              </button>
-            </div>
-            <div className="px-5 py-4 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-600 dark:text-brand-300 shrink-0">
-                  <i className="bx bx-calendar text-xl"></i>
-                </div>
-                <div className="min-w-0">
-                  <div className="font-semibold text-neutral-800 dark:text-white truncate">{detailBooking.brand} {detailBooking.model}</div>
-                  <div className="text-xs text-neutral-500 dark:text-gray-400 truncate">{detailBooking.license_plate}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-gray-300">
-                <i className="bx bx-user text-base text-neutral-400 shrink-0"></i>
-                <span className="truncate">{detailBooking.user_name}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-gray-300">
-                <i className="bx bx-calendar text-base text-neutral-400 shrink-0"></i>
-                <span>{new Date(detailBooking.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                <span className="text-neutral-300 dark:text-gray-600">→</span>
-                <span>{new Date(detailBooking.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </div>
-              {detailBooking.purpose && (
-                <div className="text-sm text-neutral-600 dark:text-gray-300 bg-neutral-50 dark:bg-gray-700/50 rounded-lg px-3 py-2">
-                  <span className="text-neutral-400 text-xs block mb-0.5">วัตถุประสงค์</span>
-                  {detailBooking.purpose}
-                </div>
-              )}
-            </div>
-            <div className="px-5 py-3 border-t border-neutral-100 dark:border-gray-700">              {canManageBookings && detailBooking.status === 'pending' ? (
-                <div className="flex gap-2">
-                  <button onClick={() => adminApprove(detailBooking.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 transition-colors">
-                    <i className="bx bx-check text-sm"></i>
-                    อนุมัติ
-                  </button>
-                  <button onClick={() => setRejectModal({ open: true, reason: '' })}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-rose-500 hover:bg-rose-600 active:bg-rose-700 transition-colors">
-                    <i className="bx bx-x text-sm"></i>
-                    ปฏิเสธ
-                  </button>
-                </div>
-              ) : canManageBookings && detailBooking.status === 'approved' ? (
-                <button onClick={() => adminReturn(detailBooking.id)}
-                  className="w-full flex items-center justify-center gap-1.5 h-9 text-xs font-semibold rounded-lg text-white bg-blue-500 hover:bg-blue-600 active:bg-blue-700 transition-colors">
-                  <i className="bx bx-refresh text-sm"></i>
-                  คืนรถ
-                </button>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                    style={{
-                      backgroundColor: (STATUS_COLORS[detailBooking.status] || '#6b7280') + '20',
-                      color: STATUS_COLORS[detailBooking.status] || '#6b7280',
-                    }}>
-                    {statusLabel(detailBooking.status)}
-                  </span>
-                  <button onClick={() => setDetailBooking(null)}
-                    className="text-xs font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-gray-300 transition-colors px-3 py-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700">
-                    ปิด
-                  </button>
-                </div>
-              )}
-            </div>
-            {!publicMode && detailBooking.admin_notes && (
-              <div className="px-5 pb-3 -mt-1">
-                <span className="text-[10px] text-neutral-400">หมายเหตุ: {detailBooking.admin_notes}</span>
-              </div>
-            )}
-          </div>
-        </div>
+      <BookingDetailModal
+        booking={detailBooking}
+        publicMode={!!publicMode}
+        canManageBookings={canManageBookings}
+        onClose={() => setDetailBooking(null)}
+        onActionDone={fetchData}
+        setToast={setToast}
+        onAdminApprove={(id) => adminApprove(id)}
+        onOpenRejectModal={() => setRejectModal({ open: true, reason: '' })}
+        onAdminReturn={(id) => adminReturn(id)}
+      />
+
+      {toast && (
+        <Toast type={toast.type} submessage={toast.submessage} onClose={() => setToast(null)} />
       )}
 
       {rejectModal.open && (

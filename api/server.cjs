@@ -7,6 +7,8 @@ const bookingRoutes = require('./routes/bookings.cjs')
 const notificationRoutes = require('./routes/notifications.cjs')
 const adminRoutes = require('./routes/admin.cjs')
 const publicRoutes = require('./routes/public.cjs')
+const { addClient } = require('./sse.cjs')
+const { verifyToken } = require('./middleware/auth.cjs')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -42,6 +44,30 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/public', publicRoutes)
+
+app.get('/api/events', (req, res) => {
+  const token = req.query.token
+  if (!token) return res.status(401).json({ error: 'No token' })
+  try {
+    const decoded = verifyToken(token)
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+    // Flush headers
+    res.write(':ok\n\n')
+    addClient(res, decoded.id, decoded.role)
+    // Keep-alive every 30s
+    const keepAlive = setInterval(() => {
+      try { res.write(':keepalive\n\n') } catch { clearInterval(keepAlive) }
+    }, 30000)
+    req.on('close', () => clearInterval(keepAlive))
+  } catch {
+    res.status(403).json({ error: 'Invalid token' })
+  }
+})
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })

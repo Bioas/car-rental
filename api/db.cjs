@@ -81,7 +81,7 @@ async function initDB() {
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
       purpose TEXT DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','returned')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','returned','cancelled')),
       admin_notes TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -89,6 +89,36 @@ async function initDB() {
       FOREIGN KEY (car_id) REFERENCES cars(id) ON DELETE CASCADE
     )
   `)
+
+  // Migrate existing table if it doesn't have 'cancelled'
+  try {
+    const tblSql = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='bookings'")
+    const currentSql = tblSql?.[0]?.values?.[0]?.[0] || ''
+    if (currentSql.includes('cancelled') === false) {
+      db.run('PRAGMA foreign_keys = OFF')
+      db.run('BEGIN TRANSACTION')
+      db.run(`CREATE TABLE bookings_migrated (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        car_id INTEGER NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        purpose TEXT DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','returned','cancelled')),
+        admin_notes TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (car_id) REFERENCES cars(id) ON DELETE CASCADE
+      )`)
+      db.run('INSERT INTO bookings_migrated SELECT * FROM bookings')
+      db.run('DROP TABLE bookings')
+      db.run('ALTER TABLE bookings_migrated RENAME TO bookings')
+      db.run('COMMIT')
+      db.run('PRAGMA foreign_keys = ON')
+      save()
+    }
+  } catch(e) { console.error('Migration error:', e) }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS notifications (

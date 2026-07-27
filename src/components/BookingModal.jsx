@@ -1,143 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { todayStr } from '../lib/constants'
-
-const THAI_SHORT = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-const DAYS_TH = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.']
-
-function pad(n) { return String(n).padStart(2, '0') }
-
-function DatePicker({ value, onChange, min }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-  const panelRef = useRef(null)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const minDate = min ? new Date(min + 'T00:00:00') : today
-  const [viewDate, setViewDate] = useState(value ? new Date(value + 'T00:00:00') : today)
-
-  useEffect(() => {
-    if (value) setViewDate(new Date(value + 'T00:00:00'))
-  }, [value])
-
-  useEffect(() => {
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target) && panelRef.current && !panelRef.current.contains(e.target)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const vy = viewDate.getFullYear()
-  const vm = viewDate.getMonth()
-
-  const dim = new Date(vy, vm + 1, 0).getDate()
-  const firstDay = new Date(vy, vm, 1).getDay()
-  const prevDim = new Date(vy, vm, 0).getDate()
-
-  const cells = []
-  for (let i = 0; i < firstDay; i++) cells.push({ d: prevDim - firstDay + 1 + i, other: true })
-  for (let i = 1; i <= dim; i++) cells.push({ d: i, other: false })
-  const rem = cells.length % 7
-  if (rem) for (let i = 1; i <= 7 - rem; i++) cells.push({ d: i, other: true })
-
-  function isSameDay(a, b) {
-    return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-  }
-
-  function isDisabled(d) {
-    const date = new Date(vy, vm, d)
-    return date < minDate
-  }
-
-  function pickDate(d) {
-    const date = new Date(vy, vm, d)
-    if (date < minDate) return
-    onChange(date.toLocaleDateString('en-CA'))
-    setOpen(false)
-  }
-
-  function goPrev() {
-    setViewDate(new Date(vy, vm - 1, 1))
-  }
-
-  function goNext() {
-    setViewDate(new Date(vy, vm + 1, 1))
-  }
-
-  function formatDisplay(dateStr) {
-    if (!dateStr) return ''
-    const d = new Date(dateStr + 'T00:00:00')
-    return `${d.getDate()} ${THAI_SHORT[d.getMonth() + 1]} ${d.getFullYear() + 543}`
-  }
-
-  const selectedDate = value ? new Date(value + 'T00:00:00') : null
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className={`w-full h-11 px-3.5 flex items-center justify-between bg-white dark:bg-gray-800 border rounded-xl text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 ${
-          open ? 'border-brand-400 ring-2 ring-brand-100' : 'border-neutral-200 dark:border-gray-600'
-        } ${selectedDate ? 'text-neutral-800 dark:text-gray-100' : 'text-neutral-400'}`}>
-        <span className="truncate">{selectedDate ? formatDisplay(value) : 'เลือกวันที่'}</span>
-        <i className={`bx bx-calendar text-base text-neutral-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
-      </button>
-
-      {open && (
-        <div ref={panelRef}
-          className="absolute z-50 top-full mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-neutral-200 dark:border-gray-600 rounded-xl shadow-lg overflow-hidden origin-top">
-          <div className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <button type="button" onClick={goPrev}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/40 text-neutral-600 dark:text-gray-400 transition-colors text-xs">
-                <i className="bx bx-chevron-left text-xs"></i>
-              </button>
-              <div className="text-xs font-semibold text-neutral-800 dark:text-gray-100">
-                {THAI_SHORT[vm + 1]} {vy + 543}
-              </div>
-              <button type="button" onClick={goNext}
-                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/40 text-neutral-600 dark:text-gray-400 transition-colors text-xs">
-                <i className="bx bx-chevron-right text-xs"></i>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-7 mb-1">
-              {DAYS_TH.map(d => (
-                <div key={d} className="flex items-center justify-center h-6 text-[10px] text-neutral-400 dark:text-gray-500 font-medium">{d}</div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7 gap-0.5">
-              {cells.map((c, i) => {
-                const d = new Date(vy, vm, c.d)
-                const isSel = isSameDay(d, selectedDate)
-                const disabled = isDisabled(c.d)
-                const isTd = isSameDay(d, today)
-                return (
-                  <button key={i} type="button" disabled={disabled}
-                    onClick={() => !c.other && pickDate(c.d)}
-                    className={`flex items-center justify-center w-full aspect-square text-center text-xs rounded-lg transition-colors ${
-                      c.other ? 'text-neutral-200 dark:text-gray-600 cursor-default' : 'text-neutral-700 dark:text-gray-300 hover:bg-brand-50 dark:hover:bg-brand-950/40'
-                    } ${isSel ? 'bg-brand-600 text-white font-semibold hover:bg-brand-700' : ''} ${isTd && !isSel ? 'text-brand-600 dark:text-brand-400 font-semibold' : ''} ${
-                      disabled ? 'text-neutral-200 dark:text-gray-600 cursor-not-allowed hover:bg-transparent' : ''
-                    }`}>
-                    {c.d}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedDate && (
-        <p className="text-[11px] text-neutral-400 dark:text-gray-500 mt-1">{formatDisplay(value)}</p>
-      )}
-    </div>
-  )
-}
+import RangeDatePicker from './RangeDatePicker'
 
 function CarSelect({ value, onChange, options }) {
   const [open, setOpen] = useState(false)
@@ -412,15 +276,20 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <CarSelect value={form.car_id} onChange={v => updateForm('car_id', v)} options={availableCars} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">วันที่เริ่มต้น</label>
-              <DatePicker value={form.start_date} onChange={v => updateForm('start_date', v)} min={today} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">วันที่สิ้นสุด</label>
-              <DatePicker value={form.end_date} onChange={v => updateForm('end_date', v)} min={minEnd} />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ช่วงวันที่ใช้งาน</label>
+            {/* RangeDatePicker (vehicle-tab style) replaces the prior
+                2-half-bar DateRangeBar. Trigger button shows
+                start→end (X วัน) summary + opens step='start'/'end'
+                state machine panel. Pre-fill from CalendarPage is
+                passed via initialDate → form.start_date → RangeDatePicker's
+                selStart prop. min={today} blocks past dates from being
+                picked. */}
+            <RangeDatePicker
+              startDate={form.start_date}
+              endDate={form.end_date}
+              onChange={(s, e) => { updateForm('start_date', s); updateForm('end_date', e) }}
+              min={today} />
           </div>
 
           <div>

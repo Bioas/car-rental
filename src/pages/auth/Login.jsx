@@ -1,24 +1,25 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import { Toast } from '../../components/ui/toast'
 
 export default function Login() {
   const navigate = useNavigate()
   const { login } = useApp()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(false)
 
   async function handleLogin(e) {
     e.preventDefault()
-    setError('')
+    setToast(null)
     setLoading(true)
     try {
       await login(email, password)
       navigate('/app/')
     } catch (e) {
-      setError(e.message)
+      setToast({ type: 'error', submessage: 'เข้าสู่ระบบไม่สำเร็จ', message: e.message })
     } finally {
       setLoading(false)
     }
@@ -47,13 +48,6 @@ export default function Login() {
                 <input value={password} onChange={e => setPassword(e.target.value)} type="password" className="input" placeholder="••••••••" autoComplete="current-password" required />
               </div>
 
-              {error && (
-                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
-                  <i className="bx bx-error-circle text-base flex-shrink-0"></i>
-                  <span>{error}</span>
-                </div>
-              )}
-
               <button type="submit" disabled={loading} className="btn-primary w-full">
                 {loading && (
                   <i className="bx bx-loader-alt text-base animate-spin"></i>
@@ -71,6 +65,8 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {toast && <Toast type={toast.type} message={toast.message} submessage={toast.submessage} onClose={() => setToast(null)} duration={4000} />}
 
       <div className="hidden lg:flex flex-1 bg-gradient-to-br from-brand-600 via-brand-700 to-brand-900 items-center justify-center p-12 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">

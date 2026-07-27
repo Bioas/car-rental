@@ -1,6 +1,7 @@
 const { Router } = require('express')
 const bcrypt = require('bcryptjs')
 const { all, get, insert, update, run } = require('../db.cjs')
+const { broadcastToRole, broadcastToUser } = require('../sse.cjs')
 const { authMiddleware, adminMiddleware } = require('../middleware/auth.cjs')
 
 const router = Router()
@@ -187,6 +188,9 @@ router.put('/bookings/:id/approve', (req, res) => {
 
     update('bookings', { status: 'approved', updated_at: new Date().toISOString() }, 'id', booking.id)
 
+    // Mark old booking-request notifications as read
+    run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+
     const car = get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
     insert('notifications', {
       user_id: booking.user_id,
@@ -195,6 +199,9 @@ router.put('/bookings/:id/approve', (req, res) => {
       related_type: 'booking',
       related_id: booking.id
     })
+
+    broadcastToRole('admin', 'data-changed', { action: 'approve', booking_id: booking.id })
+    broadcastToUser(booking.user_id, 'data-changed', { action: 'approve', booking_id: booking.id })
 
     res.json({ message: 'อนุมัติสำเร็จ' })
   } catch (err) {
@@ -210,6 +217,9 @@ router.put('/bookings/:id/reject', (req, res) => {
 
     update('bookings', { status: 'rejected', admin_notes: admin_notes || '', updated_at: new Date().toISOString() }, 'id', booking.id)
 
+    // Mark old booking-request notifications as read
+    run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+
     const car = get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
     insert('notifications', {
       user_id: booking.user_id,
@@ -218,6 +228,9 @@ router.put('/bookings/:id/reject', (req, res) => {
       related_type: 'booking',
       related_id: booking.id
     })
+
+    broadcastToRole('admin', 'data-changed', { action: 'reject', booking_id: booking.id })
+    broadcastToUser(booking.user_id, 'data-changed', { action: 'reject', booking_id: booking.id })
 
     res.json({ message: 'ปฏิเสธสำเร็จ' })
   } catch (err) {
@@ -233,6 +246,9 @@ router.put('/bookings/:id/return', (req, res) => {
 
     update('bookings', { status: 'returned', updated_at: new Date().toISOString() }, 'id', booking.id)
 
+    // Mark old booking-request notifications as read
+    run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+
     insert('notifications', {
       user_id: booking.user_id,
       message: `🔁 คืนรถเรียบร้อยแล้ว (Booking #${booking.id})`,
@@ -240,6 +256,9 @@ router.put('/bookings/:id/return', (req, res) => {
       related_type: 'booking',
       related_id: booking.id
     })
+
+    broadcastToRole('admin', 'data-changed', { action: 'return', booking_id: booking.id })
+    broadcastToUser(booking.user_id, 'data-changed', { action: 'return', booking_id: booking.id })
 
     res.json({ message: 'บันทึกการคืนรถสำเร็จ' })
   } catch (err) {
@@ -269,6 +288,22 @@ router.get('/reports', (req, res) => {
       `SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count
        FROM bookings GROUP BY month ORDER BY month DESC LIMIT 12`
     )
+
+    // Per-status breakdown per month
+    const bookingsByMonthDetail = all(
+      `SELECT strftime('%Y-%m', created_at) as month, status, COUNT(*) as count
+       FROM bookings GROUP BY month, status ORDER BY month DESC`
+    )
+
+    // Enrich each month with its status breakdown
+    const monthDetailMap = {}
+    for (const d of bookingsByMonthDetail) {
+      if (!monthDetailMap[d.month]) monthDetailMap[d.month] = {}
+      monthDetailMap[d.month][d.status] = d.count
+    }
+    for (const m of bookingsByMonth) {
+      m.breakdown = monthDetailMap[m.month] || {}
+    }
 
     const topUsers = all(
       `SELECT u.id, u.name, u.email, COUNT(b.id) as count

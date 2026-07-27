@@ -1,5 +1,6 @@
 const { Router } = require('express')
-const { all, get, insert } = require('../db.cjs')
+const { all, get, insert, run } = require('../db.cjs')
+const { broadcastToRole } = require('../sse.cjs')
 
 const router = Router()
 
@@ -85,8 +86,9 @@ router.post('/bookings/lookup', (req, res) => {
     const ids = users.map(u => u.id)
     const placeholders = ids.map(() => '?').join(',')
     const rows = all(
-      `SELECT b.*, c.brand, c.model, c.license_plate
+      `SELECT b.*, u.name as user_name, c.brand, c.model, c.license_plate
        FROM bookings b
+       JOIN users u ON b.user_id = u.id
        JOIN cars c ON b.car_id = c.id
        WHERE b.user_id IN (${placeholders})
        ORDER BY b.created_at DESC`,
@@ -97,6 +99,107 @@ router.post('/bookings/lookup', (req, res) => {
     const bookings = rows.map(({ admin_notes, ...rest }) => rest)
 
     res.json({ bookings, users })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/bookings/:id/return', async (req, res) => {
+  try {
+    const { id_card } = req.body
+    if (!id_card) {
+      return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
+    }
+
+    const booking = get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
+    if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
+
+    if (booking.status !== 'approved') {
+      return res.status(400).json({ error: 'เฉพาะรายการที่อนุมัติแล้วเท่านั้นที่สามารถคืนรถได้' })
+    }
+
+    const user = get('SELECT id_card FROM users WHERE id = ?', [booking.user_id])
+    if (!user || !user.id_card) {
+      return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
+    }
+
+    if (user.id_card !== id_card) {
+      return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
+    }
+
+    const car = get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
+
+    update('bookings', {
+      status: 'returned',
+      updated_at: new Date().toISOString()
+    }, 'id', booking.id)
+
+    // Notify admins
+    const admins = all('SELECT id FROM users WHERE role = ?', ['admin'])
+    admins.forEach(a => {
+      insert('notifications', {
+        user_id: a.id,
+        message: `🔁 ${car.brand} ${car.model} (${car.license_plate}) คืนรถเรียบร้อยแล้ว`,
+        type: 'returned',
+        related_type: 'booking',
+        related_id: booking.id
+      })
+    })
+
+    broadcastToRole('admin', 'data-changed', { action: 'public-return', booking_id: booking.id })
+
+    res.json({ message: 'คืนรถสำเร็จ' })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+router.post('/bookings/:id/cancel', async (req, res) => {
+  try {
+    const { id_card } = req.body
+    if (!id_card) {
+      return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
+    }
+
+    const booking = get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
+    if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
+
+    if (booking.status !== 'pending') {
+      return res.status(400).json({ error: 'เฉพาะรายการที่รออนุมัติเท่านั้นที่สามารถยกเลิกได้' })
+    }
+
+    const user = get('SELECT id_card FROM users WHERE id = ?', [booking.user_id])
+    if (!user || !user.id_card) {
+      return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
+    }
+
+    if (user.id_card !== id_card) {
+      return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
+    }
+
+    const car = get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
+
+    // Mark old booking-request notifications as read
+    run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+
+    // Notify admins about the cancellation
+    const admins = all('SELECT id FROM users WHERE role = ?', ['admin'])
+    admins.forEach(a => {
+      insert('notifications', {
+        user_id: a.id,
+        message: `❌ ${car.brand} ${car.model} (${car.license_plate}) ถูกยกเลิกโดยผู้ยืม`,
+        type: 'cancelled',
+        related_type: 'booking',
+        related_id: booking.id
+      })
+    })
+
+    // Delete the booking record entirely
+    run('DELETE FROM bookings WHERE id = ?', [booking.id])
+
+    broadcastToRole('admin', 'data-changed', { action: 'cancel', booking_id: booking.id })
+
+    res.json({ message: 'ยกเลิกการจองสำเร็จ' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -169,6 +272,14 @@ router.post('/bookings', async (req, res) => {
         related_type: 'booking',
         related_id: bookingId
       })
+    })
+
+    broadcastToRole('admin', 'data-changed', {
+      action: 'new-booking',
+      booking_id: bookingId,
+      user_name: user?.name || name || 'ผู้ยืม',
+      car_brand: car.brand,
+      car_model: car.model,
     })
 
     res.status(201).json({ message: 'ส่งคำขอยืมเรียบร้อย' })

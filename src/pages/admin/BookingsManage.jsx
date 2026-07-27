@@ -3,21 +3,23 @@ import { useApp } from '../../context/AppContext'
 import { statusLabel, badgeClass } from '../../lib/constants'
 import { Spinner } from '../../components/ui/spinner'
 import { EmptyState } from '../../components/ui/empty-state'
+import { Toast } from '../../components/ui/toast'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
 
 export default function BookingsManage() {
-  const { authHeaders, fetchNotificationCount } = useApp()
+  const { authHeaders, fetchNotificationCount, refreshSignal } = useApp()
   const [bookings, setBookings] = useState([])
   const [filter, setFilter] = useState('pending')
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
   const [viewTab, setViewTab] = useState('list')
+  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     fetchBookings()
-  }, [])
+  }, [refreshSignal])
 
   const pendingCount = bookings.filter(b => b.status === 'pending').length
   const rejectedCount = bookings.filter(b => b.status === 'rejected').length
@@ -34,7 +36,7 @@ export default function BookingsManage() {
   async function approveBooking(id) {
     try {
       const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { await fetchBookings(); fetchNotificationCount() }
+      if (res.ok) { await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'อนุมัติคำขอยืมเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 
@@ -51,7 +53,7 @@ export default function BookingsManage() {
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_notes: rejectReason })
       })
-      if (res.ok) { setShowRejectModal(false); await fetchBookings(); fetchNotificationCount() }
+      if (res.ok) { setShowRejectModal(false); await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'ปฏิเสธคำขอยืมเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 
@@ -59,7 +61,7 @@ export default function BookingsManage() {
     if (!confirm('ยืนยันการคืนรถ?')) return
     try {
       const res = await fetch(`/api/admin/bookings/${id}/return`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { await fetchBookings(); fetchNotificationCount() }
+      if (res.ok) { await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'คืนรถเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 
@@ -106,11 +108,11 @@ export default function BookingsManage() {
       ) : (
       <>
 
-      {/* Filter chips — horizontal scroll on mobile, no wrap */}
-      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1"
+      {/* Filter chips — horizontal scroll on mobile (fade edge), plain on desktop */}
+      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1 sm:overflow-visible sm:flex-wrap sm:pb-0 sm:![mask-image:none]"
         style={{
-          maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)',
-          WebkitMaskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)',
+          maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
         }}>
         {[
           { key: 'all', label: 'ทั้งหมด', count: null },
@@ -294,6 +296,8 @@ export default function BookingsManage() {
         </div>
         )}
       </div>
+
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowRejectModal(false)}>

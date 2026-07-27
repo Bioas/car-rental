@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { statusLabel, badgeClass } from '../../lib/constants'
+import { Toast } from '../../components/ui/toast'
 
 export default function CarsManage() {
   const { authHeaders } = useApp()
@@ -9,6 +10,7 @@ export default function CarsManage() {
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState(null)
   const [form, setForm] = useState({ license_plate: '', brand: '', model: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
@@ -60,6 +62,7 @@ export default function CarsManage() {
       }
       setShowModal(false)
       await fetchCars()
+      setToast({ type: 'success', message: editing ? 'แก้ไขรถเรียบร้อย' : 'เพิ่มรถใหม่เรียบร้อย' })
     } catch {
       setError('เกิดข้อผิดพลาด')
     } finally {
@@ -73,6 +76,7 @@ export default function CarsManage() {
       const res = await fetch(`/api/admin/cars/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (res.ok) {
         await fetchCars()
+        setToast({ type: 'success', message: 'ลบรถเรียบร้อย' })
       } else {
         const data = await res.json()
         alert(data.error)
@@ -227,6 +231,8 @@ export default function CarsManage() {
         )}
       </div>
 
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
@@ -347,7 +353,7 @@ export default function CarsManage() {
 
               {/* Error */}
               {error && (
-                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <div key={error} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2 animate-shake">
                   <i className="bx bx-error-circle text-base shrink-0"></i>
                   {error}
                 </div>

@@ -2,6 +2,7 @@ export const STATUS_LABELS = {
   pending: 'รออนุมัติ',
   approved: 'อนุมัติแล้ว',
   rejected: 'ปฏิเสธ',
+  cancelled: 'ยกเลิกแล้ว',
   returned: 'คืนแล้ว',
   available: 'พร้อมใช้',
   booked: 'กำลังถูกจอง',
@@ -13,6 +14,7 @@ export const STATUS_COLORS = {
   pending: '#f59e0b',
   approved: '#10b981',
   rejected: '#ef4444',
+  cancelled: '#6b7280',
   returned: '#3b82f6',
 }
 
@@ -33,6 +35,7 @@ const BADGE_CLASSES = {
   pending: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300',
   approved: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
   rejected: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-900/50 dark:text-red-300',
+  cancelled: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
   returned: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
   booked: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
   available: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',

@@ -126,7 +126,7 @@
   color: #f43f5e !important;
 }
 .fc-custom .fc-event {
-  border-radius: 999px;
+  border-radius: 4px;
   padding: 1px 6px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -142,6 +142,50 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border-radius: 4px;
+  min-height: 20px;
+  cursor: pointer;
+  pointer-events: auto !important;
+  z-index: 5;
+}
+/* Connect multi-day event segments: only the outer ends keep rounded corners,
+   inner segments share flat edges. Negative horizontal margins let each segment
+   overlap the 2px inter-cell padding plus the hairline border so the bar reads
+   as one continuous pixel-perfect strip across day cells. Middle/last segments
+   get -2px; single-day events have both fc-event-start and fc-event-end, so
+   they don't match either :not(...) and keep their original 2px inner gap. */
+.fc-custom .fc-daygrid-event:not(.fc-event-start) {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -2px;
+}
+.fc-custom .fc-daygrid-event:not(.fc-event-end) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -2px;
+}
+/* Defensive: don't let the negative right margin on the rightmost-column
+   start-segment bleed past the calendar grid (no neighbor to absorb it). */
+.fc-custom .fc-daygrid-day:last-child .fc-daygrid-event:not(.fc-event-end) {
+  margin-right: 0;
+}
+/* Subtle inner shadow at top + bottom edges gives the multi-day bar a
+   beveled depth feel. Only on multi-day segments; single-day pills stay clean.
+   Outer shadows are clipped by .fc-daygrid-event's overflow:hidden, so both
+   values are inset. Top highlight makes the bar read as slightly raised. */
+.fc-custom .fc-daygrid-event:not(.fc-event-start.fc-event-end) {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.12);
+}
+/* Hide title, status label and left stripe on inner segments so only the
+   start segment shows visual chrome — the bar reads as one uniform strip.
+   IMPORTANT: use `visibility: hidden` (not display: none) so the inner spans
+   keep their layout box. With display:none the wrapper would collapse to
+   0×0 and the browser couldn't register clicks on inner segments. */
+.fc-custom .fc-daygrid-event:not(.fc-event-start) .fc-event-label,
+.fc-custom .fc-daygrid-event:not(.fc-event-start) .fc-event-status,
+.fc-custom .fc-daygrid-event:not(.fc-event-start) .fc-event-stripe {
+  visibility: hidden;
+  pointer-events: none;
 }
 .fc-custom .fc-daygrid-dot-event {
   padding: 1px 6px;
@@ -183,10 +227,16 @@
 .fc-custom .fc-day-other .fc-daygrid-day-top { opacity: 1 }
 .fc-custom .fc-day-other .fc-daygrid-day-number { color: #d4d4d4 }
 .fc-custom .fc-daygrid-day-events { padding: 0 2px }
+/* Tighten the gap between month cells so multi-day bars sit closer together */
+.fc-custom .fc-daygrid-event-harness { margin-bottom: 2px }
+.fc-custom .fc-daygrid-event-harness:not(:first-child) { margin-top: 0 }
 .fc-custom .fc-daygrid-body table { border-collapse: separate; border-spacing: 0 }
 .fc-custom .fc-col-header table { border-collapse: separate; border-spacing: 0 }
 .fc-custom .fc-daygrid-day-frame {
   padding: 6px 4px;
+}
+.fc-custom .fc-scroller-liquid-absolute {
+  overflow: visible !important;
 }
 .fc-custom .fc-scrollgrid-sync-inner { min-height: 0; }
 .fc-custom .fc-scrollgrid-sync-table td { height: auto !important; border: none !important }
@@ -199,7 +249,8 @@
   .fc-custom .fc-daygrid-day-number { font-size: 0.65rem; padding: 0.25rem; }
   .fc-custom .fc-col-header-cell-cushion { font-size: 0.6rem; padding: 0.5rem 0.25rem; letter-spacing: 0; }
   .fc-custom .fc-daygrid-day-frame { padding: 4px 2px; }
-  .fc-custom .fc-event { font-size: 0.55rem; padding: 0 4px; border-radius: 999px; }
+  .fc-custom .fc-event { font-size: 0.55rem; padding: 0 4px; border-radius: 3px; }
+  .fc-custom .fc-daygrid-event { border-radius: 3px; }
   .fc-custom .fc-daygrid-day-events { padding: 0 1px; }
   .fc-custom .fc-more-link { font-size: 0.6rem; }
   .fc-custom .fc-daygrid-day-top { padding: 1px 2px; }
@@ -242,3 +293,21 @@
 }
 .dark .fc-custom .fc-day-other .fc-daygrid-day-number { color: #4b5563 }
 .dark .fc-custom td.fc-daygrid-day:hover { background-color: rgba(59,130,246,0.15) }
+
+/* Multi-day bar hover glow is now handled in src/components/CalendarMonthGrid.jsx
+   via the `hoveredBookingId` React state at component level — each segment
+   applies `brightness-110 saturate-150` whenever its booking id matches the
+   state. This covers BOTH same-row and cross-row (multi-week) bookings
+   uniformly without requiring :has() CSS support. */
+
+/* Bar label text-shadow: strengthens white-on-pastel readability. Bar fill
+   is now a per-user pastel hex (Tailwind 300-400) instead of saturated
+   status colors, so the previous `drop-shadow-sm` Tailwind filter (tuned
+   for saturated bgs) was too subtle. This single rule is shared by ALL
+   three label sites: month-view cal-month-bar-label, week-view user_name
+   span (`.week-bar-label`), and week-view status_label span (`.week-bar-
+   status`). Two-layer halo (soft 0 1px 2px + sharp 0 0 1px) keeps white
+   text legible on pink-400, rose-300, cyan-300, etc. */
+.cal-bar-label {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 1px rgba(0, 0, 0, 0.35);
+}

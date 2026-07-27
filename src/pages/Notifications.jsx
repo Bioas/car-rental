@@ -14,6 +14,8 @@ const NOTIF_TYPES = {
   cancelled: { label: 'ยกเลิก', icon: 'bxs-info-circle', color: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' },
 }
 
+const TYPE_ORDER = ['booking_request', 'approved', 'rejected', 'cancelled']
+
 function getNotifType(type) {
   return NOTIF_TYPES[type] || { label: 'ทั่วไป', icon: 'bxs-info-circle', color: 'bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400' }
 }
@@ -37,6 +39,23 @@ function SkeletonItem() {
           <div className="h-4 w-3/4 bg-gray-100 dark:bg-gray-800 rounded" />
           <div className="h-3 w-20 bg-gray-100 dark:bg-gray-800 rounded" />
         </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, icon, color, sublabel }) {
+  return (
+    <div className="flex items-center gap-3 p-3 sm:p-4 rounded-xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+        <i className={`bx ${icon} text-xl`}></i>
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">{value}</p>
+        {sublabel && (
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">{sublabel}</p>
+        )}
       </div>
     </div>
   )
@@ -135,6 +154,12 @@ export default function Notifications() {
     }
   }
 
+  // Compute stats from notifications
+  const byType = {}
+  for (const n of notifications) {
+    byType[n.type] = (byType[n.type] || 0) + 1
+  }
+
   const filtered = notifications.filter(n => {
     if (filter === 'unread' && n.is_read) return false
     return true
@@ -144,7 +169,7 @@ export default function Notifications() {
 
   if (loading) {
     return (
-      <div className="animate-fade-in max-w-4xl flex flex-col flex-1 min-h-0">
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0 w-full">
         <div className="mb-6">
           <div className="h-8 w-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse mb-2" />
           <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
@@ -157,22 +182,23 @@ export default function Notifications() {
   }
 
   return (
-    <div className="animate-fade-in max-w-4xl flex flex-col flex-1 min-h-0">
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div>
+    <div className="animate-fade-in flex flex-col flex-1 min-h-0 w-full max-w-none">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5 sm:mb-6">
+        <div>
+          <div className="flex items-center gap-3">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white font-heading">การแจ้งเตือน</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-              {notifications.length === 0
-                ? 'คุณยังไม่มีการแจ้งเตือน'
-                : `ทั้งหมด ${notifications.length} รายการ`}
-            </p>
+            {unread > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold">
+                {unread}
+              </span>
+            )}
           </div>
-          {unread > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-full bg-brand-600 text-white text-[11px] font-bold">
-              {unread}
-            </span>
-          )}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            {notifications.length === 0
+              ? 'คุณยังไม่มีการแจ้งเตือน'
+              : `ทั้งหมด ${notifications.length} รายการ · ยังไม่ได้อ่าน ${unread} รายการ`}
+          </p>
         </div>
         {unread > 0 && (
           <button
@@ -185,9 +211,41 @@ export default function Notifications() {
         )}
       </div>
 
-      {/* Filter Tabs */}
+      {/* Stats Summary — only show when there are notifications */}
       {notifications.length > 0 && (
-        <div className="flex gap-1.5 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5 sm:mb-6">
+          <StatCard
+            label="ทั้งหมด"
+            value={notifications.length}
+            icon="bx-bell"
+            color="bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400"
+          />
+          <StatCard
+            label="ยังไม่ได้อ่าน"
+            value={unread}
+            icon="bxs-bell-ring"
+            color="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400"
+          />
+          <StatCard
+            label="คำขอจอง"
+            value={byType.booking_request || 0}
+            icon="bx-calendar"
+            color="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+            sublabel={byType.approved ? `อนุมัติ ${byType.approved || 0}` : undefined}
+          />
+          <StatCard
+            label="อื่นๆ"
+            value={(byType.rejected || 0) + (byType.cancelled || 0)}
+            icon="bxs-info-circle"
+            color="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
+            sublabel={byType.rejected ? `ปฏิเสธ ${byType.rejected} รายการ` : undefined}
+          />
+        </div>
+      )}
+
+      {/* Filter Tabs + Type Filters */}
+      {notifications.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-5 sm:mb-6">
           {FILTERS.map(f => (
             <button
               key={f.key}
@@ -204,12 +262,29 @@ export default function Notifications() {
               </span>
             </button>
           ))}
+          {/* Type indicator chips — non-interactive, just show counts */}
+          {TYPE_ORDER.map(type => {
+            const t = getNotifType(type)
+            const count = byType[type] || 0
+            if (count === 0) return null
+            return (
+              <span
+                key={type}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium ${
+                  t.color
+                } opacity-80`}
+              >
+                <i className={`bx ${t.icon} text-xs`}></i>
+                {count}
+              </span>
+            )
+          })}
         </div>
       )}
 
       {/* Empty States */}
       {notifications.length === 0 && (
-        <div className="card py-20">
+        <div className="card flex-1 flex items-center justify-center">
           <div className="text-center max-w-xs mx-auto">
             <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center">
               <i className="bx bx-bell text-4xl text-gray-300 dark:text-gray-600"></i>
@@ -223,7 +298,7 @@ export default function Notifications() {
       )}
 
       {notifications.length > 0 && filtered.length === 0 && filter === 'unread' && (
-        <div className="card py-16">
+        <div className="card flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
               <i className="bx bxs-check-circle text-3xl text-emerald-500 dark:text-emerald-400"></i>
@@ -233,13 +308,20 @@ export default function Notifications() {
         </div>
       )}
 
-      {/* Grouped Notification List */}
+      {/* Grouped Notification List — full width */}
       {groups.map((group, gi) => (
         <div key={group.label} className={gi > 0 ? 'mt-8' : ''}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 px-1">
-            {group.label}
-          </h3>
-          <div className="space-y-2">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {group.label}
+              </span>
+              <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">{group.items.length} รายการ</span>
+            </div>
+            <div className="flex-1 h-px bg-gray-100 dark:bg-gray-800" />
+          </div>
+          <div className="grid grid-cols-1 gap-2">
             {group.items.map((n, i) => {
               const t = getNotifType(n.type)
               const isUnread = !n.is_read
@@ -261,15 +343,20 @@ export default function Notifications() {
                     }`}
                 >
                   <div className="flex items-start gap-4">
-                    <NotifIcon type={n.type} />
+                    <div className="relative">
+                      <NotifIcon type={n.type} />
+                      {isUnread && (
+                        <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-brand-500 dark:bg-brand-400 ring-2 ring-white dark:ring-gray-900" />
+                      )}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-0.5">
                         <span className={`text-[10px] font-semibold uppercase tracking-wide ${
                           isUnread ? 'text-brand-500 dark:text-brand-400' : 'text-gray-400 dark:text-gray-500'
                         }`}>
                           {t.label}
                         </span>
-                        <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
+                        <span className="hidden sm:inline text-[10px] text-gray-300 dark:text-gray-600">·</span>
                         <span className="text-[10px] text-gray-400 dark:text-gray-500">{timeAgo(n.created_at)}</span>
                       </div>
                       <p className={`text-sm leading-snug ${
@@ -281,7 +368,7 @@ export default function Notifications() {
                       </p>
                     </div>
                     {isUnread && (
-                      <div className="flex-shrink-0 mt-1.5">
+                      <div className="hidden sm:flex flex-shrink-0 mt-1.5">
                         <div className="w-2.5 h-2.5 rounded-full bg-brand-500 dark:bg-brand-400 ring-2 ring-brand-100 dark:ring-brand-900/50" />
                       </div>
                     )}
