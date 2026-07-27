@@ -5,10 +5,10 @@ const THAI_SHORT = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', '�
 
 // Listen to viewport width to switch mobile/desktop rendering. Returns
 // `true` when window.innerWidth < 640 (Tailwind's `sm` breakpoint). Used
-// internally by RangeDatePicker — mobile stacks ~36 months vertically
-// with a confirm ("ตกลง") button; desktop renders 2 months side-by-side
-// with hover preview pill.
-function useIsMobile() {
+// internally by RangeDatePicker and exported so other surfaces
+// (e.g. the PublicBooking modal) can match the same breakpoint
+// without duplicating the resize listener / state plumbing.
+export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     function handler() {
@@ -54,8 +54,54 @@ function formatDateStr(date, short = false) {
 //   min — minimum selectable date (date string); defaults to today
 //   size — 'lg' for the vehicle-tab trigger (h-12 px-5 text-base);
 //          default 'h-12 px-4 text-sm' for modal pops
-export default function RangeDatePicker({ startDate, endDate, onChange, min, size }) {
-  const [open, setOpen] = useState(false)
+// RangeDatePicker — full-width trigger button that opens an interactive
+// calendar panel for picking start_date + end_date as a range. Cell
+// rendering reuses CalendarMonth (which in turn owns the unified pill
+// logic across the app).
+//   step='start': click any day → setStart, advance step to 'end'
+//   step='end': click any day (>= start) → setEnd, close picker
+//   step='start' after BOTH set: skip the cancel step, click any day
+//     immediately becomes new start_date → step transitions to 'end'
+//     (per user feedback "คลิกรอบแรกเลยให้เป็นวันเริ่มต้น" — avoids
+//     wasting one click as a no-op "cancel").
+//
+// Two render modes:
+//   - Default: trigger button + (desktop) positioned dropdown panel
+//     OR (mobile < 640px) full-screen overlay panel with a ตกลง
+//     confirm button at the bottom. Mobile needs explicit confirm
+//     because there's no hover capability to preview a range.
+//   - inline=true: no trigger button, no mobile backdrop, panel
+//     renders directly inside the parent container (e.g. inside a
+//     modal popup). The parent owns the surface layout; clicking
+//     outside does NOT close the picker (parent decides).
+//
+// Props:
+//   startDate, endDate — date string — current range values
+//   onChange(start, end) — fires when either side changes (start OR end)
+//   min — minimum selectable date (date string); defaults to today
+//   size — 'lg' for vehicle-tab trigger (h-12 px-5 text-base);
+//          default 'h-12 px-4 text-sm' for modal pops
+//   inline — if true, omit the trigger button and skip click-outside
+//          / body-scroll-lock side-effects (parent owns those)
+//   noTrigger — omit the trigger button WITHOUT skipping the click-outside
+//          and body-scroll-lock effects. Used when the parent already
+//          supplies its own trigger (e.g. the modal's click-anywhere
+//          summary pill) and the picker renders as a sibling overlay
+//          popup (mobile use case in PublicBooking modal). On mobile this
+//          produces the same fullscreen overlay UX as the main-page
+//          picker, but triggered by the parent's external affordance.
+//   onClose — fires when the panel auto-dismisses (mobile ตกลง confirm,
+//          desktop after end-date pick). Lets the parent swap surfaces
+//          (e.g. summary pill → inline picker → summary) without the
+//          picker permanently owning body-scroll or focus state.
+//
+// Render-mode matrix:
+//   inline=false, noTrigger=false → desktop dropdown OR mobile overlay
+//                                   WITH trigger button rendered
+//   inline=true,  noTrigger=false → inline panel inside parent (no trigger) — parent owns surface
+//   inline=false, noTrigger=true  → overlay popup WITHOUT trigger — parent provides its own (mobile modal flow)
+export default function RangeDatePicker({ startDate, endDate, onChange, min, size, inline = false, noTrigger = false, onClose }) {
+  const [open, setOpen] = useState(inline || noTrigger)
   const ref = useRef(null)
   const panelRef = useRef(null)
   const today = new Date()
@@ -65,6 +111,21 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
   const [hoverDate, setHoverDate] = useState(null)
   const [viewDate, setViewDate] = useState(today)
   const isMobile = useIsMobile()
+
+  // Sync `step` when startDate/endDate props change AND we're in a
+  // mode where the parent owns surfacing (inline or noTrigger). In
+  // the trigger-button modes (default mobile+desktop), the trigger
+  // button's onClick handler does this sync synchronously on open.
+  // Without this useEffect, both inline-edited and the new
+  // mobile-overlay (noTrigger) pickers would always enter step='start'
+  // on mount even when an end_date is awaited — user would have to
+  // click twice (once to reset range, once to commit end) for a
+  // partially-selected state to flow through.
+  useEffect(() => {
+    if (!inline && !noTrigger) return
+    if (startDate && !endDate) setStep('end')
+    else setStep('start')
+  }, [inline, noTrigger, startDate, endDate])
 
   const vy = viewDate.getFullYear()
   const vm = viewDate.getMonth()
@@ -81,8 +142,11 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
 
   // Click-outside closes the panel and resets state machine to step='start'.
   // Two refs (trigger + panel) because on mobile the panel is a sibling
-  // element outside the trigger's DOM tree.
+  // element outside the trigger's DOM tree. In inline mode the parent
+  // owns surfacing — skipping this avoids accidental dismissal when the
+  // user clicks sibling form fields above/below the picker.
   useEffect(() => {
+    if (inline) return
     function handler(e) {
       if (ref.current && !ref.current.contains(e.target) && panelRef.current && !panelRef.current.contains(e.target)) {
         setOpen(false)
@@ -91,19 +155,37 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [])
+  }, [inline])
 
   // Lock body scroll while the calendar overlay is open (mobile mode is
   // `fixed inset-0` so we want full-screen backdrop; desktop mode also
   // benefits from no parent scroll-jitter when the modal panel renders).
+  // In `inline` mode AND in `noTrigger` mode the parent surface owns
+  // the body-lock — skipping prevents a second lock that would race
+  // with the parent's cleanup (e.g. modal closing first vs picker
+  // closing first). The default trigger-button modes (desktop dropdown
+  // + standalone mobile overlay) DO own their own lock because there's
+  // no parent surface competing for body-scroll.
   useEffect(() => {
+    if (inline || noTrigger) return
     if (open) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
     }
     return () => { document.body.style.overflow = '' }
-  }, [open])
+  }, [open, inline, noTrigger])
+
+  // Notify parent when the picker auto-dismisses (mobile ตกลง confirm,
+  // desktop after end-date click, or back-out click-outside when not
+  // in inline mode). Use a ref to detect the true→false transition
+  // and skip the initial mount fire (inline=true opens the panel by
+  // default, so we'd otherwise emit onClose on first render).
+  const prevOpenRef = useRef(open)
+  useEffect(() => {
+    if (prevOpenRef.current && !open && onClose) onClose()
+    prevOpenRef.current = open
+  }, [open, onClose])
 
   const selStart = startDate ? new Date(startDate + 'T00:00:00') : null
   const selEnd = endDate ? new Date(endDate + 'T00:00:00') : null
@@ -150,10 +232,6 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
     setStep('start')
   }
 
-  // Trigger button text — shows progress through step state:
-  //   no start → "เลือกวันที่ใช้งานพาหนะ"
-  //   start only → "X → เลือกวันที่คืน"
-  //   both → "X → Y (Z วัน)"
   const displayText = selStart
     ? selEnd
       ? `${formatDateStr(selStart, isMobile)} → ${formatDateStr(selEnd, isMobile)} (${Math.round((selEnd - selStart) / (1000 * 60 * 60 * 24)) + 1} วัน)`
@@ -161,7 +239,8 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
     : 'เลือกวันที่ใช้งานพาหนะ'
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={inline ? '' : 'relative'}>
+      {!inline && !noTrigger && (
       <button type="button" onClick={() => {
           if (!open) {
             // Pick-up context: if a start_date is already set but no
@@ -182,15 +261,14 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
         <span className="flex-1 truncate text-left leading-tight">{displayText}</span>
         <i className={`bx bx-chevron-down shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
+      )}
       {open && (
         <>
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 sm:hidden" onClick={() => { setOpen(false); setStep('start') }} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:block sm:p-0">
-          <div ref={panelRef} className="
-            pointer-events-auto w-full max-h-[95vh] overflow-y-auto
-            sm:mx-auto sm:w-[640px] sm:overflow-visible
-            bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in
-          ">
+          {!inline && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 sm:hidden" onClick={() => { setOpen(false); setStep('start') }} />}
+          <div className={inline ? 'block' : 'fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:block sm:p-0'}>
+          <div ref={panelRef} className={inline
+            ? "pointer-events-auto w-full max-h-[60vh] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"
+            : "pointer-events-auto w-full max-h-[95vh] overflow-y-auto sm:mx-auto sm:w-[640px] sm:overflow-visible bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"}>
             <div className="p-4 sm:p-6 w-full">
             {isMobile ? (
               <>

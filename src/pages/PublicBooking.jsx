@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import BookingDetailModal from '../components/BookingDetailModal'
 import { Toast } from '../components/ui/toast'
-import RangeDatePicker from '../components/RangeDatePicker'
+import RangeDatePicker, { useIsMobile } from '../components/RangeDatePicker'
 
 const CalendarPage = React.lazy(() => import('./CalendarPage'))
 
@@ -15,6 +15,36 @@ function statusLabel(s) {
 
 function todayStr() {
   return new Date().toLocaleDateString('en-CA')
+}
+
+// `useIsMobile` is imported from RangeDatePicker — same 640px
+// breakpoint (Tailwind `sm`) and resize logic — so the modal's
+// viewport branch stays in sync with the picker's mobile/desktop
+// rendering. Used here to decide whether the modal's date block
+// shows the inline picker (desktop) or pops the picker out as a
+// sibling fullscreen overlay (mobile).
+
+// Read-only date-rendering helpers used by the booking modal below.
+// The modal no longer hosts an interactive datepicker (per user
+// feedback "ตัว datepicker ใน pop up ของโหมด desktop ปรับไม่ให้อยู่ใน
+// pop up"); dates are picked from the main page's RangeDatePicker
+// trigger bar above, and the modal is a pure confirm step. Labels
+// show "X → Y (N วัน)" using Thai-buddhist formatting aligned with
+// the vehicle-tab trigger bar so the dates read identically across
+// both surfaces. Inline (rather than extracted to a shared module)
+// to keep PublicBooking self-contained and avoid a new cross-file
+// dependency.
+const MODAL_THAI_SHORT = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+function fmtModalDate(dStr) {
+  if (!dStr) return ''
+  const d = new Date(dStr + 'T00:00:00')
+  return `${d.getDate()} ${MODAL_THAI_SHORT[d.getMonth() + 1]} ${d.getFullYear() + 543}`
+}
+function modalDayDiff(start, end) {
+  if (!start || !end) return 0
+  const s = new Date(start + 'T00:00:00')
+  const e = new Date(end + 'T00:00:00')
+  return Math.round((e - s) / 86400000) + 1
 }
 
 
@@ -185,18 +215,38 @@ export default function PublicBooking() {
   const [showBookingModal, setShowBookingModal] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0)
+  // isEditingDate: toggles the modal's date block between the
+  // read-only summary pill (false) and the date-edit surface (true).
+  // On desktop this swaps the modal's date block to an inline
+  // RangeDatePicker; on mobile it instead opens a sibling overlay
+  // popup (z-60) above the modal so the user gets the same exact
+  // fullscreen-overlay picker UX as the main-page mobile picker.
+  // Either way, clicking the picker's confirm/back-out fires onClose
+  // → setIsEditingDate(false) → summary reappears with updated dates.
+  const [isEditingDate, setIsEditingDate] = useState(false)
+  const isMobile = useIsMobile()
 
-  const closeModal = useCallback(() => {
-    if (isClosing) return
+  // closeModal: hides the modal, resets form/success/toast state, and
+  // plays the 300ms scale-out animation. Plain const-arrow function
+  // (no useCallback) — fresh closure per render is safe because we
+  // only call state setters, which React guarantees are stable
+  // references. Earlier this was useCallback([isClosing]) with a
+  // `if (isClosing) return` guard that occasionally stale-closed
+  // over `isClosing = true` after rapid close paths, blocking the
+  // next click. Plain const-arrow removes that footgun. The two
+  // close paths share the same pattern so behavior matches
+  // share the same pattern so their behavior matches.
+  const closeModal = () => {
     setIsClosing(true)
     setTimeout(() => {
       setShowBookingModal(false)
       setSuccess(false)
       setToast(null)
       setIsClosing(false)
+      setIsEditingDate(false)
       setForm({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '' })
     }, 300)
-  }, [isClosing])
+  }
   const tabBarRef = useRef(null)
 
   useEffect(() => {
@@ -561,18 +611,88 @@ export default function PublicBooking() {
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ช่วงวันที่ใช้รถ</label>
-                    {/* RangeDatePicker (vehicle-tab style) replaces
-                        the prior 2-half-bar DateRangeBar. Trigger button
-                        shows start→end (X วัน) summary, opens a
-                        step='start'/'end' state machine panel on click
-                        — fully identical to the vehicle-tab main picker
-                        (both consume the same component module now). */}
-                    <RangeDatePicker
-                      startDate={form.start_date}
-                      endDate={form.end_date}
-                      onChange={(s, e) => setForm(prev => ({ ...prev, start_date: s, end_date: e }))}
-                      min={todayStr()}
-                      size="lg" />
+                    {/* Two-mode date block — toggles between:
+                        (A) click-anywhere summary pill — the entire
+                            pill (calendar icon + date text + chevron
+                            hint) is a single <button>, so clicking
+                            ANYWHERE inside the box enters edit mode.
+                            This removes the small "แก้ไข" text
+                            affordance and signals editability through
+                            a chevron-down hint + cursor-pointer +
+                            hover lighten + focus ring instead, per
+                            user feedback "อยากแก้ไขให้กดตรงไหนใน
+                            กรอบก็ได้ไม่ต้องกดแค่ตรงแก้ไข เอาปุ่ม
+                            แก้ไขออกเลยก็ได้";
+                        (B) inline RangeDatePicker panel rendered
+                            inside the modal — the user picks new
+                            dates without leaving the popup.
+                        On desktop the picker auto-dismisses after a
+                        full range is committed (handlePick → setOpen
+                        (false) → onClose fires); on mobile the user
+                        confirms with the in-picker ตกลง button. Both
+                        paths call onClose, which flips isEditingDate
+                        back to false → mode (A) re-appears with the
+                        new dates.
+                        The "ยกเลิก" affordance in mode (B) returns to
+                        summary without committing any change. Modal
+                        stays open across the entire toggle — only
+                        the inner block swaps. */}
+                    {/* In-modal date block — branches on viewport:
+                          (A) Desktop + isEditingDate → inline picker
+                              renders inside the modal container (the
+                              panel grows, scroll inside it).
+                          (B) Mobile + isEditingDate    → nothing here;
+                              the overlay picker is rendered as a
+                              sibling `<div fixed inset-0 z-60>` ABOVE
+                              the modal (see the matching render block
+                              after the modal). Modal stays visible
+                              underneath, summary pill is briefly visible
+                              behind the overlay until the picker
+                              disclaims.
+                          (C) !isEditingDate          → the click-anywhere
+                              summary pill (default state). On mobile
+                              this serves both before and during the
+                              overlay-picker-open window because the
+                              overlay covers it visually. */}
+                    {isEditingDate && !isMobile ? (
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">เลือกวันที่ใช้รถใหม่</span>
+                          <button type="button" onClick={() => setIsEditingDate(false)}
+                            className="text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline underline-offset-2">
+                            ยกเลิก
+                          </button>
+                        </div>
+                        <RangeDatePicker
+                          startDate={form.start_date}
+                          endDate={form.end_date}
+                          onChange={(s, e) => {
+                            setForm(prev => ({ ...prev, start_date: s, end_date: e }))
+                            if (s && e) fetchCars(s, e)
+                          }}
+                          onClose={() => setIsEditingDate(false)}
+                          min={todayStr()}
+                          inline />
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setIsEditingDate(true)}
+                        aria-label="แก้ไขวันที่ใช้รถ"
+                        className="w-full flex items-center justify-between px-4 py-3 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl gap-3 cursor-pointer hover:bg-brand-100 dark:hover:bg-brand-950/50 active:bg-brand-200 dark:active:bg-brand-950/70 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-300 text-left">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm shrink-0">
+                            <i className="bx bx-calendar text-brand-500" aria-hidden="true"></i>
+                          </div>
+                          <div className="text-sm font-medium text-brand-900 dark:text-brand-100 truncate">
+                            {form.start_date && form.end_date
+                              ? <>{fmtModalDate(form.start_date)} → {fmtModalDate(form.end_date)} ({modalDayDiff(form.start_date, form.end_date)} วัน)</>
+                              : form.start_date
+                                ? <>{fmtModalDate(form.start_date)} → <span className="text-amber-500">เลือกวันคืน</span></>
+                                : <span className="text-gray-400">ยังไม่ได้เลือกวันที่</span>}
+                          </div>
+                        </div>
+                        <i className="bx bx-chevron-down text-base text-brand-500 dark:text-brand-400 shrink-0 ml-3" aria-hidden="true"></i>
+                      </button>
+                    )}
                   </div>
 
                   <div>
@@ -593,6 +713,31 @@ export default function PublicBooking() {
               )}
             </div>
           </div>
+          )}
+
+          {/* Mobile date-picker overlay — sibling of the modal, stacked
+              above (z-60 vs modal z-50). Only renders on mobile when
+              the user has clicked the modal's summary pill and the
+              picker needs to appear as a fullscreen popup (matching
+              the original mobile picker UX). RangeDatePicker's
+              `noTrigger` flag omits its internal trigger button — the
+              modal's summary pill is the external trigger. The
+              picker fires onClose on mobile ตกลง confirm OR on
+              backdrop dismiss → sets isEditingDate=false → overlay
+              unmounts, modal summary updates. */}
+          {showBookingModal && isMobile && isEditingDate && (
+            <div className="fixed inset-0 z-[60]">
+              <RangeDatePicker
+                noTrigger
+                startDate={form.start_date}
+                endDate={form.end_date}
+                onChange={(s, e) => {
+                  setForm(prev => ({ ...prev, start_date: s, end_date: e }))
+                  if (s && e) fetchCars(s, e)
+                }}
+                onClose={() => setIsEditingDate(false)}
+                min={todayStr()} />
+            </div>
           )}
 
           <BookingDetailModal
