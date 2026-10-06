@@ -58,5 +58,7 @@ export function timeAgo(dateStr) {
 }
 
 export function todayStr() {
-  return new Date().toISOString().split('T')[0]
+  // Local calendar date as YYYY-MM-DD. Using toISOString() returns the UTC date,
+  // which is still "yesterday" in UTC+7 during the early morning.
+  return new Date().toLocaleDateString('en-CA')
 }

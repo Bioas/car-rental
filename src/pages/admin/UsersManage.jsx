@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { Pager } from '../../components/ui/pager'
+
+const PAGE_SIZE = 20
 
 export default function UsersManage() {
   const { authHeaders } = useApp()
   const [users, setUsers] = useState([])
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -21,7 +27,7 @@ export default function UsersManage() {
 
   useEffect(() => {
     fetchUsers()
-  }, [])
+  }, [page])
 
   function openModal(user) {
     setError('')
@@ -65,7 +71,9 @@ export default function UsersManage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setShowModal(false)
-      await fetchUsers()
+      // A new user lands at the top of page 1; jump there so it is visible.
+      if (!isEdit && page !== 1) setPage(1)
+      else await fetchUsers()
     } catch {
       setError('เกิดข้อผิดพลาด')
     } finally {
@@ -83,8 +91,16 @@ export default function UsersManage() {
 
   async function fetchUsers() {
     try {
-      const res = await fetch('/api/admin/users', { headers: authHeaders() })
-      if (res.ok) { const data = await res.json(); setUsers(data.users) }
+      const res = await fetch(`/api/admin/users?page=${page}&limit=${PAGE_SIZE}`, { headers: authHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        const rows = data.users || []
+        setUsers(rows)
+        setPages(data.pages || 1)
+        setTotal(data.total || 0)
+        // Deleting the last row of a page can leave it empty — step back.
+        if (rows.length === 0 && page > 1) setPage(p => Math.max(p - 1, 1))
+      }
     } catch (e) { console.error(e) }
   }
 
@@ -222,6 +238,8 @@ export default function UsersManage() {
         </div>
         )}
       </div>
+
+      <Pager page={page} pages={pages} total={total} limit={PAGE_SIZE} onChange={setPage} />
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>

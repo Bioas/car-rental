@@ -207,8 +207,6 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
     })
   }
 
-  const minEnd = form.start_date || today
-
   async function submitBooking(e) {
     e.preventDefault()
     setError('')

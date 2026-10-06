@@ -229,7 +229,6 @@ export function CalendarMonthGrid({
       <div className="flex-1 grid min-h-0" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(96px, 1fr))` }}>
         {weeks.map((week, rowIdx) => {
           const bars = weekBars[rowIdx] || []
-          const maxTracks = Math.max(1, ...bars.map(b => b.totalTracks || 1))
           return (
             <div
               key={rowIdx}

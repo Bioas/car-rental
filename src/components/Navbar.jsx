@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { timeAgo } from '../lib/constants'
 
@@ -15,8 +15,7 @@ function getNotifType(type) {
 }
 
 export function Navbar() {
-  const { sidebarOpen, toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, isAdmin, logout, authHeaders } = useApp()
-  const location = useLocation()
+  const { toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, isAdmin, logout, authHeaders } = useApp()
   const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showNotifDropdown, setShowNotifDropdown] = useState(false)

@@ -181,7 +181,7 @@ function CarSelect({ value, onChange, options }) {
                 </div>
                 <div className="text-left flex-1 min-w-0">
                   <div className="text-sm font-medium leading-tight truncate">{c.brand} {c.model}</div>
-                  <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{c.license_plate} · {c.seats} ที่นั่ง}</div>
+                  <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{c.license_plate} · {c.seats} ที่นั่ง</div>
                 </div>
                 {c.id === value && (
                   <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
@@ -490,7 +490,7 @@ export default function PublicBooking() {
               <p className="text-gray-500 dark:text-gray-400 mt-1">ดูภาพรวมการจองยานพาหนะ</p>
             </div>
             <React.Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400"><i className="bx bx-loader-alt text-2xl animate-spin"></i></div>}>
-              <CalendarPage publicMode onDateClick={(dateStr, carId) => { updateForm('start_date', dateStr); setShowBookingModal(true) }} refreshKey={calendarRefreshKey} />
+              <CalendarPage publicMode onDateClick={(dateStr) => { updateForm('start_date', dateStr); setShowBookingModal(true) }} refreshKey={calendarRefreshKey} />
             </React.Suspense>
           </section>
           )}
@@ -505,12 +505,12 @@ export default function PublicBooking() {
             <div className="max-w-2xl mx-auto">
               <form onSubmit={handleLookup} className="bg-white dark:bg-gray-800/80 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-950/50 border border-gray-100 dark:border-gray-700 p-6 mb-4">
                 <div className="mb-4">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ชื่อ / เบอร์โทรศัพท์ / เลขบัตรประชาชน</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ชื่อ / เบอร์โทรศัพท์</label>
                   <div className="relative">
                     <i className="bx bx-search absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                     <input value={lookupQuery} onChange={e => setLookupQuery(e.target.value)}
                       className="w-full h-11 pl-10 pr-4 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
-                      placeholder="ชื่อ, เบอร์โทรศัพท์ หรือเลขบัตรประชาชน" />
+                      placeholder="ชื่อ หรือ เบอร์โทรศัพท์" />
                   </div>
                 </div>
                 <button type="submit" disabled={lookupLoading || !lookupQuery}

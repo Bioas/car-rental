@@ -22,6 +22,9 @@ export function AppProvider({ children }) {
   const [globalToast, setGlobalToast] = useState(null)
   const [sseConnected, setSseConnected] = useState(false)
   const eventSourceRef = useRef(null)
+  const sseErrorRef = useRef(0)
+  const fetchUserRef = useRef(null)
+  const logoutRef = useRef(null)
 
   const isLoggedIn = !!token
   const isAdmin = user?.role === 'admin'
@@ -91,7 +94,8 @@ export function AppProvider({ children }) {
         logout()
       }
     } catch {
-      logout()
+      // A transient network error must not end the session — only an explicit
+      // 401 response (handled above) should log the user out.
     } finally {
       setUserLoaded(true)
     }
@@ -104,12 +108,19 @@ export function AppProvider({ children }) {
     navigate('/login')
   }, [navigate])
 
+  // Keep the newest callbacks reachable from the SSE event handlers. Assigned in
+  // an effect rather than during render, which would be a render side effect.
+  useEffect(() => {
+    fetchUserRef.current = fetchUser
+    logoutRef.current = logout
+  }, [fetchUser, logout])
+
   const connectSSE = useCallback(() => {
     const t = localStorage.getItem('token')
     if (!t) return
     if (eventSourceRef.current) eventSourceRef.current.close()
     const es = new EventSource(`${API}/events?token=${encodeURIComponent(t)}`)
-    es.onopen = () => setSseConnected(true)
+    es.onopen = () => { sseErrorRef.current = 0; setSseConnected(true) }
     es.addEventListener('data-changed', (e) => {
       setRefreshSignal(prev => prev + 1)
       fetchNotificationCount()
@@ -120,7 +131,27 @@ export function AppProvider({ children }) {
         }
       } catch {}
     })
-    es.onerror = () => setSseConnected(false)
+    // The server re-validates the stream's token periodically and announces a
+    // revocation (password change, role change, deleted account) before closing
+    // it — end the session here instead of waiting for the next API call.
+    es.addEventListener('session-expired', () => {
+      es.close()
+      if (eventSourceRef.current === es) eventSourceRef.current = null
+      setSseConnected(false)
+      logoutRef.current && logoutRef.current()
+    })
+    es.onerror = () => {
+      setSseConnected(false)
+      sseErrorRef.current += 1
+      // EventSource retries on its own forever. If it keeps failing (e.g. the
+      // token expired or was revoked) stop and re-validate the session instead
+      // of hammering the server with a dead token.
+      if (sseErrorRef.current >= 3) {
+        es.close()
+        if (eventSourceRef.current === es) eventSourceRef.current = null
+        fetchUserRef.current && fetchUserRef.current()
+      }
+    }
     eventSourceRef.current = es
   }, [])
 

@@ -187,10 +187,6 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     }
   }
 
-  function handleToday() {
-    setViewDate(new Date())
-  }
-
   function switchView(mode) {
     setViewMode(mode)
     if (mode === 'week') setViewDate(new Date())

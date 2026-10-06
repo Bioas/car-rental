@@ -4,13 +4,22 @@ import { statusLabel, badgeClass } from '../../lib/constants'
 import { Spinner } from '../../components/ui/spinner'
 import { EmptyState } from '../../components/ui/empty-state'
 import { Toast } from '../../components/ui/toast'
+import { Pager } from '../../components/ui/pager'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
+
+// The list is paged on the server so a long booking history does not have to be
+// shipped to the browser before the first paint.
+const PAGE_SIZE = 20
 
 export default function BookingsManage() {
   const { authHeaders, fetchNotificationCount, refreshSignal } = useApp()
   const [bookings, setBookings] = useState([])
   const [filter, setFilter] = useState('pending')
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState({ all: 0, pending: 0, approved: 0, rejected: 0, returned: 0 })
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -19,17 +28,29 @@ export default function BookingsManage() {
 
   useEffect(() => {
     fetchBookings()
-  }, [refreshSignal])
+  }, [refreshSignal, page, filter])
 
-  const pendingCount = bookings.filter(b => b.status === 'pending').length
-  const rejectedCount = bookings.filter(b => b.status === 'rejected').length
-  const returnedCount = bookings.filter(b => b.status === 'returned').length
-  const filteredBookings = filter === 'all' ? bookings : bookings.filter(b => b.status === filter)
+  // Totals come from the server — the client only holds the current page.
+  const pendingCount = counts.pending
+  const rejectedCount = counts.rejected
+  const returnedCount = counts.returned
+  const filteredBookings = bookings
 
   async function fetchBookings() {
     try {
-      const res = await fetch('/api/admin/bookings', { headers: authHeaders() })
-      if (res.ok) { const data = await res.json(); setBookings(data.bookings || []) }
+      const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
+      if (filter !== 'all') params.set('status', filter)
+      const res = await fetch(`/api/admin/bookings?${params}`, { headers: authHeaders() })
+      if (res.ok) {
+        const data = await res.json()
+        const rows = data.bookings || []
+        setBookings(rows)
+        if (data.counts) setCounts(data.counts)
+        setPages(data.pages || 1)
+        setTotal(data.total || 0)
+        // Acting on the last row of a page can leave it empty — step back.
+        if (rows.length === 0 && page > 1) setPage(p => Math.max(p - 1, 1))
+      }
     } catch (e) { console.error(e) }
   }
 
@@ -123,7 +144,7 @@ export default function BookingsManage() {
         ].map(f => (
           <button
             key={f.key}
-            onClick={() => setFilter(f.key)}
+            onClick={() => { setFilter(f.key); setPage(1) }}
             className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
               filter === f.key
                 ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
@@ -296,6 +317,8 @@ export default function BookingsManage() {
         </div>
         )}
       </div>
+
+      <Pager page={page} pages={pages} total={total} limit={PAGE_SIZE} onChange={setPage} />
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
