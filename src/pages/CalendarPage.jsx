@@ -255,7 +255,10 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         '#fdba74', // orange-300 (light pastel accent — replaces pale pink-100)
         '#fb923c', // orange-400 (pastel orange — distinct from saturated pending amber)
       ]
-      return colors[userId % colors.length]
+      // userId arrives as a string (ObjectId from the API). Coerce to a
+      // numeric hash so the modulo picks a stable pastel per user.
+      const hash = userId.split('').reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 0)
+      return colors[Math.abs(hash) % colors.length]
     }
     return STATUS_COLORS[status] || '#6b7280'
   }
