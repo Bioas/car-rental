@@ -246,7 +246,10 @@ export default function PublicBooking() {
       setToast(null)
       setIsClosing(false)
       setIsEditingDate(false)
-      setForm({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '' })
+      // Keep start_date + end_date (the date range the user picked)
+      // so closing the modal doesn't throw away the date selection.
+      // Only clear per-booking fields: user, car, purpose.
+      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '' }))
     }, 300)
   }
   const tabBarRef = useRef(null)
@@ -321,7 +324,10 @@ export default function PublicBooking() {
       const d = await res.json()
       if (!res.ok) { setToast({ type: 'error', submessage: d.error }); return }
       setSuccess(true)
-      setForm({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '' })
+      // Keep start_date + end_date so the user can reuse the same date
+      // range for another booking without re-picking. Only clear the
+      // per-booking fields (user, car, purpose).
+      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '' }))
       setCalendarRefreshKey(k => k + 1)
     } catch {
       setToast({ type: 'error', submessage: 'เกิดข้อผิดพลาด กรุณาลองใหม่' })
