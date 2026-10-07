@@ -2,15 +2,15 @@
 // Ensures the documented test accounts exist (idempotent) and reports the
 // current state of the database. Safe to run repeatedly.
 //
-// The database setup in db.cjs already auto-creates an admin and one user plus
-// sample cars the first time it initializes an empty database. This script
-// additionally guarantees the accounts documented in README.md exist, so the
-// login instructions there always work even on an already-populated database.
+// db.cjs already auto-creates an admin and one user plus sample cars the first
+// time it initializes an empty database. This script additionally guarantees the
+// accounts documented in README.md exist, so the login instructions there always
+// work even on an already-populated database.
 
 require('./lib/load-env.cjs').loadEnv()
 
 const bcrypt = require('bcryptjs')
-const { initDB, get, insert, all, close, describe: describeDb } = require('./db.cjs')
+const { initDB, describe: describeDb, close, collections, find, findOne, insertOne, countDocuments } = require('./db.cjs')
 
 const SEED_USERS = [
   { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: 'admin123', role: 'admin', phone: '081-000-0000' },
@@ -23,31 +23,41 @@ async function seed() {
 
   let created = 0
   for (const u of SEED_USERS) {
-    const existing = await get('SELECT id FROM users WHERE email = ?', [u.email])
+    const existing = await findOne(collections.users, { email: u.email })
     if (existing) continue
     const hashed = await bcrypt.hash(u.password, 10)
-    await insert('users', {
+    await insertOne(collections.users, {
       name: u.name,
       email: u.email,
       password: hashed,
       role: u.role,
       phone: u.phone || '',
       id_card: '',
+      avatar: '',
+      token_version: 0,
+      created_at: new Date(),
     })
     created++
   }
 
-  const userCount = (await all('SELECT id FROM users')).length
-  const carCount = (await all('SELECT id FROM cars')).length
+  const userCount = await countDocuments(collections.users, {})
+  const carCount = await countDocuments(collections.cars, {})
+  const cars = await find(collections.cars, {}, { projection: { license_plate: 1, brand: 1, model: 1 } })
 
   console.log(`\n✅ Seed เสร็จสิ้น (${describeDb()})`)
   console.log(`   ผู้ใช้ที่เพิ่มใหม่: ${created} คน (รวมทั้งหมด ${userCount} คน)`)
-  console.log(`   รถในระบบ: ${carCount} คัน\n`)
+  console.log(`   รถในระบบ: ${carCount} คัน`)
+  console.log('')
   console.log('บัญชีทดสอบ:')
   for (const u of SEED_USERS) {
     console.log(`   - ${u.email} / ${u.password} (${u.role})`)
   }
   console.log('')
+  if (cars.length) {
+    console.log('รถตัวอย่าง:')
+    for (const c of cars) console.log(`   - ${c.license_plate} ${c.brand} ${c.model}`)
+    console.log('')
+  }
 
   await close()
   process.exit(0)

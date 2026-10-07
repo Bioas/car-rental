@@ -1,10 +1,24 @@
 const { Router } = require('express')
-const { all, insert, transaction } = require('../db.cjs')
+const { collections, find, findOne, insertOne, toId, str, withLock } = require('../db.cjs')
 const { authMiddleware } = require('../middleware/auth.cjs')
 const { isValidDate } = require('../lib/dates.cjs')
 const { httpError, sendError } = require('../lib/http-error.cjs')
 
 const router = Router()
+
+/**
+ * Find a booking for the same car whose range overlaps [start_date, end_date].
+ * Ranges are stored as plain `YYYY-MM-DD` strings, which compare correctly.
+ */
+function overlapFilter(carId, start_date, end_date, extra = {}) {
+  return {
+    car_id: carId,
+    status: { $in: ['approved', 'pending'] },
+    start_date: { $lte: end_date },
+    end_date: { $gte: start_date },
+    ...extra,
+  }
+}
 
 router.post('/', authMiddleware, async (req, res) => {
   try {
@@ -20,61 +34,79 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
     }
 
-    const { booking, car } = await transaction(async (tx) => {
-      // Lock the car first. Two people booking the same car at the same instant
-      // queue up here, so the overlap check below always sees the booking that
-      // was committed a moment earlier — checking and inserting can no longer
-      // interleave into a double booking.
-      await tx.lockRow('cars', car_id)
+    const carObjectId = toId(car_id)
 
-      const car = await tx.get('SELECT * FROM cars WHERE id = ?', [car_id])
+    // The overlap check is a read-then-write. Serialize bookings for the same
+    // car so two requests arriving at the same instant cannot both pass the
+    // check and double-book.
+    const { booking, car } = await withLock(`car:${str(car_id)}`, async () => {
+      const car = carObjectId ? await findOne(collections.cars, { _id: carObjectId }) : null
       if (!car) throw httpError(404, 'ไม่พบรถยนต์')
       if (car.status !== 'available') {
         throw httpError(400, 'รถยนต์นี้ไม่พร้อมให้เช่า')
       }
 
-      const overlap = await tx.get(
-        `SELECT id FROM bookings WHERE car_id = ? AND status IN ('approved','pending')
-         AND start_date <= ? AND end_date >= ?`,
-        [car_id, end_date, start_date]
-      )
+      const overlap = await findOne(collections.bookings, overlapFilter(car._id, start_date, end_date))
       if (overlap) {
         throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว')
       }
 
-      const finalUserId = (req.user.role === 'admin' && user_id) ? user_id : req.user.id
-      const borrower = await tx.get('SELECT id, name FROM users WHERE id = ?', [finalUserId])
+      const finalUserId = (req.user.role === 'admin' && user_id) ? toId(user_id) : toId(req.user.id)
+      const borrower = finalUserId ? await findOne(collections.users, { _id: finalUserId }) : null
       if (!borrower) throw httpError(400, 'ไม่พบผู้ใช้ที่เลือก')
 
-      const id = await tx.insert('bookings', {
-        user_id: finalUserId,
-        car_id,
+      const bookingId = await insertOne(collections.bookings, {
+        user_id: borrower._id,
+        car_id: car._id,
         start_date,
         end_date,
         purpose: purpose || '',
-        status: 'pending'
+        status: 'pending',
+        admin_notes: '',
+        created_at: new Date(),
+        updated_at: new Date(),
       })
 
-      const booking = await tx.get(`SELECT b.*, c.license_plate, c.brand, c.model
-        FROM bookings b JOIN cars c ON b.car_id = c.id WHERE b.id = ?`, [id])
-
+      const booking = await findOne(collections.bookings, { _id: bookingId })
       return { booking, car }
     })
 
     // Notifications are a side effect of a stored booking; a failure here must
-    // not roll the booking back.
-    const admins = await all('SELECT id FROM users WHERE role = ?', ['admin'])
-    for (const a of admins) {
-      await insert('notifications', {
-        user_id: a.id,
-        message: `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`,
-        type: 'booking_request',
-        related_type: 'booking',
-        related_id: booking.id
-      })
+    // not fail the booking request.
+    try {
+      const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
+      const message = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
+      for (const a of admins) {
+        await insertOne(collections.notifications, {
+          user_id: a._id,
+          message,
+          type: 'booking_request',
+          related_type: 'booking',
+          related_id: booking._id,
+          is_read: false,
+          created_at: new Date(),
+        })
+      }
+    } catch (err) {
+      console.error('[bookings] notify admins failed:', err.message)
     }
 
-    res.status(201).json({ booking })
+    res.status(201).json({
+      booking: {
+        id: str(booking._id),
+        user_id: str(booking.user_id),
+        car_id: str(booking.car_id),
+        start_date: booking.start_date,
+        end_date: booking.end_date,
+        purpose: booking.purpose || '',
+        status: booking.status,
+        admin_notes: booking.admin_notes || '',
+        created_at: booking.created_at,
+        license_plate: car.license_plate,
+        brand: car.brand,
+        model: car.model,
+      },
+    })
   } catch (err) {
     sendError(res, err)
   }
@@ -82,15 +114,39 @@ router.post('/', authMiddleware, async (req, res) => {
 
 router.get('/calendar', authMiddleware, async (req, res) => {
   try {
-    const bookings = await all(
-      `SELECT b.*, u.name as user_name, c.license_plate, c.brand, c.model
-       FROM bookings b
-       JOIN users u ON b.user_id = u.id
-       JOIN cars c ON b.car_id = c.id
-       WHERE b.status IN ('pending', 'approved', 'returned')
-       ORDER BY b.start_date ASC`
-    )
-    res.json({ bookings })
+    const bookings = await find(collections.bookings, {
+      status: { $in: ['pending', 'approved', 'returned'] },
+    }, { sort: { start_date: 1 } })
+
+    const userIds = [...new Set(bookings.map((b) => str(b.user_id)))]
+    const carIds = [...new Set(bookings.map((b) => str(b.car_id)))]
+    const [users, cars] = await Promise.all([
+      find(collections.users, { _id: { $in: userIds.map(toId).filter(Boolean) } }),
+      find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } }),
+    ])
+    const nameById = new Map(users.map((u) => [str(u._id), u.name]))
+    const carById = new Map(cars.map((c) => [str(c._id), c]))
+
+    res.json({
+      bookings: bookings.map((b) => {
+        const car = carById.get(str(b.car_id)) || {}
+        return {
+          id: str(b._id),
+          user_id: str(b.user_id),
+          user_name: nameById.get(str(b.user_id)) || '',
+          car_id: str(b.car_id),
+          start_date: b.start_date,
+          end_date: b.end_date,
+          purpose: b.purpose || '',
+          status: b.status,
+          admin_notes: b.admin_notes || '',
+          created_at: b.created_at,
+          license_plate: car.license_plate || '',
+          brand: car.brand || '',
+          model: car.model || '',
+        }
+      }),
+    })
   } catch (err) {
     sendError(res, err)
   }

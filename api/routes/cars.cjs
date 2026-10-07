@@ -1,52 +1,58 @@
 const { Router } = require('express')
-const { all, get } = require('../db.cjs')
+const { collections, find, findOne, toId, str } = require('../db.cjs')
 const { authMiddleware } = require('../middleware/auth.cjs')
 const { today } = require('../lib/dates.cjs')
 const { sendError } = require('../lib/http-error.cjs')
 
 const router = Router()
 
+function serializeCar(car, hasActiveBooking) {
+  return {
+    id: str(car._id),
+    license_plate: car.license_plate,
+    brand: car.brand,
+    model: car.model,
+    color: car.color,
+    year: car.year,
+    seats: car.seats,
+    status: car.status,
+    notes: car.notes || '',
+    created_at: car.created_at,
+    has_active_booking: hasActiveBooking ? 1 : 0,
+  }
+}
+
+/** Set of car ids (as strings) that have a booking not yet ended. */
+async function activeCarIds(now) {
+  const rows = await find(collections.bookings, {
+    status: { $in: ['pending', 'approved'] },
+    end_date: { $gte: now },
+  }, { projection: { car_id: 1 } })
+  return new Set(rows.map((r) => str(r.car_id)))
+}
+
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { status, q } = req.query
-    // "Active booking" means one that has not ended yet. `date('now')` was
-    // evaluated in UTC; the date is bound as a parameter so the local calendar
-    // day is used and the query stays testable.
     const now = today()
-    let sql = `SELECT c.*,
-      CASE WHEN EXISTS (
-        SELECT 1 FROM bookings b
-        WHERE b.car_id = c.id
-        AND b.status IN ('pending', 'approved')
-        AND b.end_date >= ?
-      ) THEN 1 ELSE 0 END as has_active_booking
-      FROM cars c`
-    // The SELECT-list placeholder above binds first, so `params` is seeded with
-    // `now` and every later condition must append in the same order.
-    const params = [now]
-    const conditions = []
 
-    if (status) {
-      if (status === 'available') {
-        conditions.push("c.status = ? AND NOT EXISTS (SELECT 1 FROM bookings b WHERE b.car_id = c.id AND b.status IN ('pending', 'approved') AND b.end_date >= ?)")
-        params.push('available', now)
-      } else {
-        conditions.push('c.status = ?')
-        params.push(status)
-      }
-    }
+    const filter = {}
+    if (status && status !== 'available') filter.status = status
     if (q) {
-      conditions.push('(c.brand LIKE ? OR c.model LIKE ? OR c.license_plate LIKE ?)')
-      params.push(`%${q}%`, `%${q}%`, `%${q}%`)
+      const rx = new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+      filter.$or = [{ brand: rx }, { model: rx }, { license_plate: rx }]
     }
 
-    if (conditions.length > 0) {
-      sql += ' WHERE ' + conditions.join(' AND ')
-    }
-    sql += ' ORDER BY c.created_at DESC'
+    const active = await activeCarIds(now)
+    let cars = await find(collections.cars, filter, { sort: { created_at: -1 } })
 
-    const cars = await all(sql, params)
-    res.json({ cars })
+    // `status=available` means "bookable right now": available and not booked
+    // for a range that has not ended yet.
+    if (status === 'available') {
+      cars = cars.filter((c) => c.status === 'available' && !active.has(str(c._id)))
+    }
+
+    res.json({ cars: cars.map((c) => serializeCar(c, active.has(str(c._id)))) })
   } catch (err) {
     sendError(res, err)
   }
@@ -54,18 +60,34 @@ router.get('/', authMiddleware, async (req, res) => {
 
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
-    const car = await get('SELECT * FROM cars WHERE id = ?', [req.params.id])
+    const id = toId(req.params.id)
+    const car = id ? await findOne(collections.cars, { _id: id }) : null
     if (!car) return res.status(404).json({ error: 'ไม่พบรถยนต์' })
 
-    const activeBookings = await all(
-      `SELECT b.*, u.name as user_name FROM bookings b
-       JOIN users u ON b.user_id = u.id
-       WHERE b.car_id = ? AND b.status IN ('approved','pending') AND b.end_date >= ?
-       ORDER BY b.start_date ASC`,
-      [req.params.id, today()]
-    )
+    const bookings = await find(collections.bookings, {
+      car_id: car._id,
+      status: { $in: ['approved', 'pending'] },
+      end_date: { $gte: today() },
+    }, { sort: { start_date: 1 } })
 
-    res.json({ car, activeBookings })
+    const userIds = [...new Set(bookings.map((b) => str(b.user_id)))]
+    const users = await find(collections.users, { _id: { $in: userIds.map(toId).filter(Boolean) } })
+    const nameById = new Map(users.map((u) => [str(u._id), u.name]))
+
+    const activeBookings = bookings.map((b) => ({
+      id: str(b._id),
+      user_id: str(b.user_id),
+      user_name: nameById.get(str(b.user_id)) || '',
+      car_id: str(b.car_id),
+      start_date: b.start_date,
+      end_date: b.end_date,
+      purpose: b.purpose || '',
+      status: b.status,
+      admin_notes: b.admin_notes || '',
+      created_at: b.created_at,
+    }))
+
+    res.json({ car: serializeCar(car, activeBookings.length > 0), activeBookings })
   } catch (err) {
     sendError(res, err)
   }

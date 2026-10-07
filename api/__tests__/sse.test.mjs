@@ -6,7 +6,7 @@ import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, auth } from 
 // AND periodically afterwards (SSE_REVALIDATE_MS is shortened in helpers.mjs),
 // so revoking a session must tear the stream down.
 
-await prepareDatabase()
+await prepareDatabase('sse')
 const app = require('../server.cjs')
 const db = require('../db.cjs')
 
@@ -28,8 +28,7 @@ afterAll(async () => {
     server.close(resolve)
     server.closeAllConnections?.()
   })
-  await db.close()
-  cleanupDatabase()
+  await cleanupDatabase()
 })
 
 /** Open an SSE connection and remember it so teardown cannot hang. */
@@ -91,7 +90,7 @@ describe(`SSE session validation`, () => {
   it('rejects a well-formed token that is not signed by this server', async () => {
     const forged = [
       Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
-      Buffer.from(JSON.stringify({ id: 1, role: 'admin', tv: 0 })).toString('base64url'),
+      Buffer.from(JSON.stringify({ id: '1', role: 'admin', tv: 0 })).toString('base64url'),
       'not-a-real-signature',
     ].join('.')
     expect((await fetch(`${base}/api/events?token=${forged}`)).status).toBe(403)

@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken')
-const { get } = require('../db.cjs')
+const { collections, findOne, toId, str, initDB } = require('../db.cjs')
 
 // Never ship a hard-coded production secret. In production a real JWT_SECRET
 // must be provided via env; in local dev we fall back to an obvious, insecure
@@ -24,9 +24,11 @@ function resolveSecret() {
 
 const JWT_SECRET = resolveSecret()
 
+/** Sign a token for a user document (Mongo `_id`) or a plain `{ id }` object. */
 function generateToken(user) {
+  const id = user._id !== undefined ? str(user._id) : String(user.id)
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role, name: user.name, tv: user.token_version || 0 },
+    { id, email: user.email, role: user.role, name: user.name, tv: user.token_version || 0 },
     JWT_SECRET,
     { expiresIn: '7d' }
   )
@@ -38,13 +40,16 @@ function verifyToken(token) {
 
 /**
  * Validate a decoded token against the live database. Returns the current user
- * row, or null when the account is gone or the token has been revoked.
+ * shape, or null when the account is gone or the token has been revoked.
  */
 async function resolveTokenUser(decoded) {
-  const dbUser = await get('SELECT id, email, role, name, token_version FROM users WHERE id = ?', [decoded.id])
+  await initDB()
+  const id = toId(decoded && decoded.id)
+  if (!id) return null
+  const dbUser = await findOne(collections.users, { _id: id })
   if (!dbUser) return null
   if ((dbUser.token_version || 0) !== (decoded.tv || 0)) return null
-  return dbUser
+  return { id: str(dbUser._id), email: dbUser.email, role: dbUser.role, name: dbUser.name, token_version: dbUser.token_version || 0 }
 }
 
 async function authMiddleware(req, res, next) {
@@ -52,29 +57,36 @@ async function authMiddleware(req, res, next) {
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
+  let decoded
   try {
-    const token = header.split(' ')[1]
-    const decoded = verifyToken(token)
-
-    // Re-check the user against the database on every request so that a
-    // deleted account, a changed role, or a password change (which bumps
-    // token_version) invalidates existing tokens immediately instead of
-    // lingering for the token's full 7-day lifetime.
-    const dbUser = await resolveTokenUser(decoded)
-    if (!dbUser) {
-      return res.status(401).json({ error: 'Invalid token' })
-    }
-
-    req.user = {
-      id: dbUser.id,
-      email: dbUser.email,
-      role: dbUser.role,
-      name: dbUser.name,
-    }
-    next()
+    decoded = verifyToken(header.slice(7))
   } catch {
     return res.status(401).json({ error: 'Invalid token' })
   }
+
+  // Re-check the user against the database on every request so that a deleted
+  // account, a changed role, or a password change (which bumps token_version)
+  // invalidates existing tokens immediately instead of lingering for the
+  // token's full 7-day lifetime.
+  let dbUser
+  try {
+    dbUser = await resolveTokenUser(decoded)
+  } catch (err) {
+    // A database outage must not masquerade as an auth failure.
+    console.error('[auth] token validation failed:', err && err.message)
+    return res.status(500).json({ error: 'Internal Server Error' })
+  }
+  if (!dbUser) {
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+
+  req.user = {
+    id: dbUser.id,
+    email: dbUser.email,
+    role: dbUser.role,
+    name: dbUser.name,
+  }
+  next()
 }
 
 function adminMiddleware(req, res, next) {

@@ -4,7 +4,7 @@
 
 > สร้างด้วย **React + Vite + Tailwind CSS** (Frontend) และ **Express** (Backend) — ภาษาไทยทั้งระบบ 🇹🇭
 >
-> ฐานข้อมูล: **SQLite ผ่าน sql.js** — ไม่ต้องติดตั้งหรือตั้งค่าเซิร์ฟเวอร์ฐานข้อมูลเพิ่ม ไฟล์เดียวจบ (ดูข้อจำกัดเรื่องโฮสต์แบบไฟล์ชั่วคราวที่หัวข้อ [ฐานข้อมูล](#-ฐานข้อมูล))
+> ฐานข้อมูล: **MongoDB** — ใช้ MongoDB Atlas บน production หรือ mongod ในเครื่องสำหรับพัฒนา (ดูรายละเอียดที่หัวข้อ [ฐานข้อมูล](#-ฐานข้อมูล))
 
 ---
 
@@ -84,12 +84,7 @@ car-rental/
 ├── api/                    # Backend (Express)
 │   ├── index.js            # Serverless entry (Vercel)
 │   ├── server.cjs         # Express app + dev server
-│   ├── db.cjs             # Data layer (async API + transaction)
-│   ├── db/
-│   │   ├── sqlite.cjs     # Driver sql.js + transaction/queue
-│   │   ├── schema.cjs     # DDL + migration
-│   │   ├── sql-builders.cjs # ตัวสร้าง INSERT/UPDATE
-│   │   └── initial-data.cjs # ข้อมูลตัวอย่างครั้งแรก
+│   ├── db.cjs             # MongoDB data layer (connect/CRUD/index/seed/lock)
 │   ├── lib/
 │   │   ├── dates.cjs      # today()/isValidDate() ตามเวลาเครื่อง
 │   │   ├── pagination.cjs # page/limit → { total, pages }
@@ -149,7 +144,8 @@ car-rental/
 | Variable            | จำเป็น                    | คำอธิบาย                                                                                       |
 |---------------------|---------------------------|--------------------------------------------------------------------------------------------------|
 | `JWT_SECRET`        | ✅ production              | คีย์สำหรับเซ็น/ตรวจ JWT — ต้องยาว ≥ 16 ตัวอักษร ถ้าไม่ตั้งบน production เซิร์ฟเวอร์จะไม่เริ่มทำงาน |
-| `SQLITE_PATH`       | ❌ (default ./data.sqlite) | ตำแหน่งไฟล์ฐานข้อมูล — ต้องเป็นที่ที่เขียนได้และ**คงอยู่ถาวร**                                      |
+| `MONGODB_URI`       | ✅ production              | connection string ของ MongoDB (เช่น `mongodb+srv://…` จาก Atlas)                                 |
+| `MONGODB_DB`        | ❌ (default car-rental)   | ชื่อฐานข้อมูล                                                                                     |
 | `SSE_REVALIDATE_MS` | ❌ (default 15000)         | ทุกกี่ ms ที่ stream แบบเรียลไทม์จะตรวจ token กับฐานข้อมูลซ้ำ                                      |
 | `SSE_KEEPALIVE_MS`  | ❌ (default 30000)         | ทุกกี่ ms ที่ส่ง keep-alive บน stream ที่เปิดอยู่                                                 |
 | `PORT`              | ❌ (default 3000)          | พอร์ตของ backend                                                                                  |
@@ -170,7 +166,7 @@ cp .env.example .env
 | Calendar | FullCalendar 6                                  |
 | Charts   | Chart.js + react-chartjs-2                      |
 | Backend  | Express 5                                       |
-| Database | SQLite (sql.js — in-process, zero config)       |
+| Database | MongoDB (mongodb driver v6)                     |
 | Auth     | JWT (jsonwebtoken) + bcryptjs                   |
 
 ---
@@ -185,7 +181,7 @@ cp .env.example .env
 | `npm run build`     | Build production                    |
 | `npm run seed`      | Seed ข้อมูลทดสอบลงฐานข้อมูล         |
 | `npm run preview`   | Preview production build            |
-| `npm test`          | รันชุดเทสต์ทั้งหมด (SQLite)         |
+| `npm test`          | รันชุดเทสต์ทั้งหมด (MongoDB)        |
 | `npm run lint`      | ตรวจโค้ดด้วย ESLint                 |
 
 ---
@@ -194,18 +190,15 @@ cp .env.example .env
 
 ## 🗄️ ฐานข้อมูล
 
-ระบบใช้ **SQLite ผ่าน sql.js** (WebAssembly, in-process) — ข้อมูลทั้งหมดอยู่ในไฟล์เดียว (`data.sqlite` โดยค่าเริ่มต้น) ไม่ต้องติดตั้งเซิร์ฟเวอร์ฐานข้อมูลแยก
+ระบบใช้ **MongoDB** — เชื่อมต่อผ่าน `MONGODB_URI` (Atlas บน production, mongod ในเครื่องสำหรับ dev)
+ต่างจาก SQLite ตรงที่เป็นเซิร์ฟเวอร์ฐานข้อมูลแยก ไม่มีไฟล์ที่ต้องเขียนลงดิสก์ จึงทำงานบนโฮสต์แบบ serverless อย่าง Vercel ได้โดยข้อมูลไม่หาย
 
-- โหมด dev/เทสต์ใช้ไฟล์ในโปรเจกต์ ส่วนบน Vercel ระบบจะเขียนที่ `/tmp` อัตโนมัติ
-- ถ้าต้องการย้ายไฟล์ ให้ตั้ง `SQLITE_PATH` (เช่นชี้ไปที่ volume ที่ mount ไว้)
+- คอลเลกชัน: `users`, `cars`, `bookings`, `notifications` (มี unique index ที่ `users.email` และ `cars.license_plate`)
+- ถ้าฐานข้อมูลว่าง ระบบจะ seed บัญชีและรถตัวอย่างให้อัตโนมัติเมื่อ init ครั้งแรก และ `npm run seed` ยังรันซ้ำได้อย่างปลอดภัย
 
-> ⚠️ **ข้อจำกัดที่ต้องรู้**: ทุกครั้งที่มีการเขียน ระบบจะเขียนไฟล์ฐานข้อมูลใหม่ทั้งไฟล์ จึงต้องมี filesystem ที่คงอยู่ถาวร
-> บน Vercel เส้นทางเดียวที่เขียนได้คือ `/tmp` ซึ่งเป็นไฟล์ชั่วคราวและแยกต่อ instance → **ข้อมูลจะหายทุกครั้งที่ redeploy / cold start**
-> ถ้าจะใช้จริงบนโฮสต์แบบนั้น ต้องย้ายไปฐานข้อมูลที่มีเซิร์ฟเวอร์ (เช่น PostgreSQL) หรือ mount volume ที่คงอยู่
+สิ่งที่รับประกันได้:
 
-สิ่งที่รับประกันได้เพราะทุก write อยู่ใน transaction ของ SQLite:
-
-- **จองพร้อมกันไม่ได้รถคันเดียวกัน** — ตอนสร้างคำขอ ระบบเข้าคิว transaction (และล็อกแถวรถถ้ามี) แล้วค่อยเช็กวันทับซ้อนก่อน insert คำขอที่แพ้จะได้ `409`
+- **จองพร้อมกันไม่ได้รถคันเดียวกัน** — งานเขียนต่อรถคันเดียวกันถูกจัดคิว (mutex ในโปรเซส) แล้วเช็กวันทับซ้อนก่อน insert คำขอที่แพ้จะได้ `409`
 - **อนุมัติ/ปฏิเสธ/คืนรถ เป็นการเปลี่ยนสถานะครั้งเดียว** — `UPDATE … WHERE status = 'expected'` ถ้าแถวถูกแก้ไปแล้วจะได้ `409` แทนการเขียนทับ
 - **แก้รหัสผ่าน / เปลี่ยน role / ลบผู้ใช้ = token เดิมใช้ไม่ได้ทันที** (ผ่าน `token_version`)
 - **stream เรียลไทม์ตรวจ token ซ้ำทุก 15 วินาที** — เซสชันที่ถูกยกเลิกจะถูกตัดและแจ้ง `session-expired` ให้หน้าเว็บ logout
@@ -213,11 +206,12 @@ cp .env.example .env
 ### รันชุดเทสต์
 
 ```bash
-npm test        # 61 เทสต์: auth, cars, bookings, admin, public, concurrency, SSE, data layer
+npm test        # 60 เทสต์: auth, cars, bookings, admin, public, concurrency, SSE, data layer
 npm run lint    # ESLint
 ```
 
-แต่ละไฟล์เทสต์สร้างฐานข้อมูล SQLite ชั่วคราวของตัวเอง จึงไม่แตะ `data.sqlite` จริง และไม่ถูก `.env` ชี้ไปฐานข้อมูลจริง
+เทสต์ต้องใช้ MongoDB จริง — ตั้ง `MONGODB_URI` (หรือ `TEST_MONGODB_URI`) ให้ชี้ไปที่คลัสเตอร์/เซิร์ฟเวอร์ที่พร้อมใช้ ก่อนรัน
+แต่ละไฟล์เทสต์ใช้ฐานข้อมูลแยกของตัวเอง (`car-rental-test-*`) จึงรันขนานกันได้โดยไม่ชนกัน และไม่แตะฐานข้อมูลจริง
 
 ### Pagination ของ API หลังบ้าน
 

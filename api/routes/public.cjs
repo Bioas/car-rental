@@ -1,5 +1,8 @@
 const { Router } = require('express')
-const { all, get, insert, run, transaction } = require('../db.cjs')
+const {
+  collections, find, findOne, insertOne, updateOne, updateMany,
+  deleteOne, toId, str, withLock,
+} = require('../db.cjs')
 const { broadcastToRole } = require('../sse.cjs')
 const { today, isValidDate } = require('../lib/dates.cjs')
 const { httpError, sendError } = require('../lib/http-error.cjs')
@@ -8,8 +11,7 @@ const router = Router()
 
 // Public cancel/return authenticate with the borrower's national ID card, which
 // is a weak shared secret. We at least normalize the value (strip spaces/dashes)
-// before comparing so the check is deterministic. NOTE: fully replacing this
-// factor requires a product decision (e.g. per-booking code or OTP).
+// before comparing so the check is deterministic.
 function normalizeIdCard(value) {
   return String(value || '').replace(/[\s-]/g, '')
 }
@@ -17,54 +19,71 @@ function normalizeIdCard(value) {
 // Public bookings derive an email from the borrower's name. The same name can
 // legitimately appear with a different phone, so make sure the generated email
 // never collides with an existing row (which previously caused a 500).
-async function uniquePublicEmail(conn, name) {
+async function uniquePublicEmail(name) {
   const base = (String(name || '').replace(/\s+/g, '').toLowerCase() || 'user').slice(0, 60)
   let email = `${base}@public.carrental`
   let n = 1
-  while (await conn.get('SELECT id FROM users WHERE email = ?', [email])) {
+  while (await findOne(collections.users, { email })) {
     email = `${base}+${n}@public.carrental`
     n++
   }
   return email
 }
 
+function serializePublicCar(car, activeCount, upcomingCount) {
+  const { _id, ...rest } = car
+  delete rest.image
+  return {
+    ...rest,
+    id: str(_id),
+    active_booking_count: activeCount,
+    upcoming_booking_count: upcomingCount,
+  }
+}
+
 router.get('/cars', async (req, res) => {
   try {
     const { start_date, end_date } = req.query
-    let whereClause = ''
-    // `date('now')` was SQLite-only and UTC-based; the local calendar day is
-    // bound as a parameter instead (three times, in SELECT-list order).
     const now = today()
-    const params = [now, now, now]
-    if (start_date && end_date) {
-      if (!isValidDate(start_date) || !isValidDate(end_date)) {
-        return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' })
-      }
-      whereClause = `AND c.id NOT IN (
-        SELECT b.car_id FROM bookings b
-        WHERE b.status IN ('approved', 'pending')
-        AND b.start_date <= ? AND b.end_date >= ?
-      )`
-      params.push(end_date, start_date)
+
+    if (start_date && end_date && (!isValidDate(start_date) || !isValidDate(end_date))) {
+      return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' })
     }
-    const cars = await all(`
-      SELECT c.*,
-        (SELECT COUNT(*) FROM bookings b
-         WHERE b.car_id = c.id
-         AND b.status IN ('approved', 'pending')
-         AND b.start_date <= ?
-         AND b.end_date >= ?
-        ) as active_booking_count,
-        (SELECT COUNT(*) FROM bookings b
-         WHERE b.car_id = c.id
-         AND b.status IN ('approved', 'pending')
-         AND b.start_date > ?
-        ) as upcoming_booking_count
-      FROM cars c
-      WHERE c.status = 'available' ${whereClause}
-      ORDER BY c.brand, c.model
-    `, params)
-    res.json({ cars })
+
+    let cars = await find(collections.cars, { status: 'available' }, { sort: { brand: 1, model: 1 } })
+
+    if (start_date && end_date) {
+      const clashing = await find(collections.bookings, {
+        status: { $in: ['approved', 'pending'] },
+        start_date: { $lte: end_date },
+        end_date: { $gte: start_date },
+      }, { projection: { car_id: 1 } })
+      const busy = new Set(clashing.map((b) => str(b.car_id)))
+      cars = cars.filter((c) => !busy.has(str(c._id)))
+    }
+
+    const bookings = await find(collections.bookings, {
+      status: { $in: ['approved', 'pending'] },
+    }, { projection: { car_id: 1, start_date: 1, end_date: 1 } })
+
+    const activeCount = new Map()
+    const upcomingCount = new Map()
+    for (const b of bookings) {
+      const key = str(b.car_id)
+      if (b.start_date <= now && b.end_date >= now) {
+        activeCount.set(key, (activeCount.get(key) || 0) + 1)
+      } else if (b.start_date > now) {
+        upcomingCount.set(key, (upcomingCount.get(key) || 0) + 1)
+      }
+    }
+
+    res.json({
+      cars: cars.map((c) => serializePublicCar(
+        c,
+        activeCount.get(str(c._id)) || 0,
+        upcomingCount.get(str(c._id)) || 0
+      )),
+    })
   } catch (err) {
     sendError(res, err)
   }
@@ -72,8 +91,8 @@ router.get('/cars', async (req, res) => {
 
 router.get('/users', async (req, res) => {
   try {
-    const users = await all("SELECT id, name, phone FROM users WHERE role = 'user' ORDER BY name ASC")
-    res.json({ users })
+    const users = await find(collections.users, { role: 'user' }, { sort: { name: 1 } })
+    res.json({ users: users.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
   } catch (err) {
     sendError(res, err)
   }
@@ -81,16 +100,37 @@ router.get('/users', async (req, res) => {
 
 router.get('/calendar', async (req, res) => {
   try {
-    const rows = await all(
-      `SELECT b.*, u.name as user_name, c.brand, c.model, c.license_plate
-       FROM bookings b
-       JOIN users u ON b.user_id = u.id
-       JOIN cars c ON b.car_id = c.id
-       WHERE b.status IN ('pending', 'approved', 'returned')
-       ORDER BY b.start_date ASC`
-    )
-    // Strip internal admin_notes from the public projection
-    const bookings = rows.map(({ admin_notes, ...rest }) => rest)
+    const rows = await find(collections.bookings, {
+      status: { $in: ['pending', 'approved', 'returned'] },
+    }, { sort: { start_date: 1 } })
+
+    const userIds = [...new Set(rows.map((b) => str(b.user_id)))]
+    const carIds = [...new Set(rows.map((b) => str(b.car_id)))]
+    const [users, cars] = await Promise.all([
+      find(collections.users, { _id: { $in: userIds.map(toId).filter(Boolean) } }),
+      find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } }),
+    ])
+    const nameById = new Map(users.map((u) => [str(u._id), u.name]))
+    const carById = new Map(cars.map((c) => [str(c._id), c]))
+
+    const bookings = rows.map((b) => {
+      const car = carById.get(str(b.car_id)) || {}
+      return {
+        id: str(b._id),
+        user_id: str(b.user_id),
+        user_name: nameById.get(str(b.user_id)) || '',
+        car_id: str(b.car_id),
+        start_date: b.start_date,
+        end_date: b.end_date,
+        purpose: b.purpose || '',
+        status: b.status,
+        created_at: b.created_at,
+        brand: car.brand || '',
+        model: car.model || '',
+        license_plate: car.license_plate || '',
+      }
+    })
+
     res.json({ bookings })
   } catch (err) {
     sendError(res, err)
@@ -107,31 +147,47 @@ router.post('/bookings/lookup', async (req, res) => {
     // Search by name/phone only. National ID cards must not be a searchable key
     // here: it would let anyone cross-reference a person's ID against their
     // booking history, and the ID card is also the factor used to cancel/return.
-    const users = await all(
-      'SELECT id, name, phone FROM users WHERE name LIKE ? OR phone = ?',
-      [`%${query}%`, query]
-    )
+    const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const users = await find(collections.users, {
+      $or: [
+        { name: { $regex: escaped, $options: 'i' } },
+        { phone: query },
+      ],
+    })
 
     if (users.length === 0) {
       return res.json({ bookings: [] })
     }
 
-    const ids = users.map(u => u.id)
-    const placeholders = ids.map(() => '?').join(',')
-    const rows = await all(
-      `SELECT b.*, u.name as user_name, c.brand, c.model, c.license_plate
-       FROM bookings b
-       JOIN users u ON b.user_id = u.id
-       JOIN cars c ON b.car_id = c.id
-       WHERE b.user_id IN (${placeholders})
-       ORDER BY b.created_at DESC`,
-      ids
-    )
+    const ids = users.map((u) => u._id)
+    const rows = await find(collections.bookings, { user_id: { $in: ids } }, { sort: { created_at: -1 } })
+
+    const userById = new Map(users.map((u) => [str(u._id), u]))
+    const carIds = [...new Set(rows.map((b) => str(b.car_id)))]
+    const cars = await find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } })
+    const carById = new Map(cars.map((c) => [str(c._id), c]))
 
     // Strip internal admin_notes — public lookup must not leak them.
-    const bookings = rows.map(({ admin_notes, ...rest }) => rest)
+    const bookings = rows.map((b) => {
+      const car = carById.get(str(b.car_id)) || {}
+      const u = userById.get(str(b.user_id)) || {}
+      return {
+        id: str(b._id),
+        user_id: str(b.user_id),
+        user_name: u.name || '',
+        car_id: str(b.car_id),
+        start_date: b.start_date,
+        end_date: b.end_date,
+        purpose: b.purpose || '',
+        status: b.status,
+        created_at: b.created_at,
+        brand: car.brand || '',
+        model: car.model || '',
+        license_plate: car.license_plate || '',
+      }
+    })
 
-    res.json({ bookings, users })
+    res.json({ bookings, users: users.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
   } catch (err) {
     sendError(res, err)
   }
@@ -144,14 +200,15 @@ router.post('/bookings/:id/return', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
     }
 
-    const booking = await get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
+    const id = toId(req.params.id)
+    const booking = id ? await findOne(collections.bookings, { _id: id }) : null
     if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
 
     if (booking.status !== 'approved') {
       return res.status(400).json({ error: 'เฉพาะรายการที่อนุมัติแล้วเท่านั้นที่สามารถคืนรถได้' })
     }
 
-    const user = await get('SELECT id_card FROM users WHERE id = ?', [booking.user_id])
+    const user = await findOne(collections.users, { _id: booking.user_id })
     if (!user || !user.id_card) {
       return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
     }
@@ -160,34 +217,36 @@ router.post('/bookings/:id/return', async (req, res) => {
       return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
     }
 
-    const car = await get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
+    const car = await findOne(collections.cars, { _id: booking.car_id })
 
-    // The `AND status = 'approved'` guard makes the transition one-shot: a
-    // second request arriving in parallel matches no row.
-    const changed = await run(
-      "UPDATE bookings SET status = 'returned', updated_at = ? WHERE id = ? AND status = 'approved'",
-      [new Date().toISOString(), booking.id]
+    // The `status: 'approved'` guard makes the transition one-shot: a second
+    // request arriving in parallel matches no row.
+    const changed = await updateOne(
+      collections.bookings,
+      { _id: booking._id, status: 'approved' },
+      { $set: { status: 'returned', updated_at: new Date() } }
     )
-    if (!changed) {
+    if (!changed.matchedCount) {
       return res.status(409).json({ error: 'รายการนี้ถูกคืนรถไปแล้ว' })
     }
 
-    // Mark old booking-request notifications as read
-    await run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+    await updateMany(
+      collections.notifications,
+      { related_type: 'booking', related_id: booking._id, type: 'booking_request' },
+      { $set: { is_read: true } }
+    )
 
-    // Notify admins
-    const admins = await all('SELECT id FROM users WHERE role = ?', ['admin'])
+    const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     for (const a of admins) {
-      await insert('notifications', {
-        user_id: a.id,
-        message: `🔁 ${car.brand} ${car.model} (${car.license_plate}) คืนรถเรียบร้อยแล้ว`,
-        type: 'returned',
-        related_type: 'booking',
-        related_id: booking.id
+      await insertOne(collections.notifications, {
+        user_id: a._id,
+        message: `🔁 ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) คืนรถเรียบร้อยแล้ว`,
+        type: 'returned', related_type: 'booking', related_id: booking._id,
+        is_read: false, created_at: new Date(),
       })
     }
 
-    broadcastToRole('admin', 'data-changed', { action: 'public-return', booking_id: booking.id })
+    broadcastToRole('admin', 'data-changed', { action: 'public-return', booking_id: str(booking._id) })
 
     res.json({ message: 'คืนรถสำเร็จ' })
   } catch (err) {
@@ -202,14 +261,15 @@ router.post('/bookings/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
     }
 
-    const booking = await get('SELECT * FROM bookings WHERE id = ?', [req.params.id])
+    const id = toId(req.params.id)
+    const booking = id ? await findOne(collections.bookings, { _id: id }) : null
     if (!booking) return res.status(404).json({ error: 'ไม่พบรายการจอง' })
 
     if (booking.status !== 'pending') {
       return res.status(400).json({ error: 'เฉพาะรายการที่รออนุมัติเท่านั้นที่สามารถยกเลิกได้' })
     }
 
-    const user = await get('SELECT id_card FROM users WHERE id = ?', [booking.user_id])
+    const user = await findOne(collections.users, { _id: booking.user_id })
     if (!user || !user.id_card) {
       return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
     }
@@ -218,31 +278,32 @@ router.post('/bookings/:id/cancel', async (req, res) => {
       return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
     }
 
-    const car = await get('SELECT * FROM cars WHERE id = ?', [booking.car_id])
+    const car = await findOne(collections.cars, { _id: booking.car_id })
 
     // Only cancel a booking that is still pending — guards against a race with
     // an admin approving it at the same moment.
-    const changed = await run('DELETE FROM bookings WHERE id = ? AND status = ?', [booking.id, 'pending'])
-    if (!changed) {
+    const removed = await deleteOne(collections.bookings, { _id: booking._id, status: 'pending' })
+    if (!removed.deletedCount) {
       return res.status(409).json({ error: 'รายการนี้ถูกอนุมัติหรือเปลี่ยนแปลงไปแล้ว' })
     }
 
-    // Mark old booking-request notifications as read
-    await run("UPDATE notifications SET is_read = 1 WHERE related_type = 'booking' AND related_id = ? AND type = 'booking_request'", [booking.id])
+    await updateMany(
+      collections.notifications,
+      { related_type: 'booking', related_id: booking._id, type: 'booking_request' },
+      { $set: { is_read: true } }
+    )
 
-    // Notify admins about the cancellation
-    const admins = await all('SELECT id FROM users WHERE role = ?', ['admin'])
+    const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     for (const a of admins) {
-      await insert('notifications', {
-        user_id: a.id,
-        message: `❌ ${car.brand} ${car.model} (${car.license_plate}) ถูกยกเลิกโดยผู้ยืม`,
-        type: 'cancelled',
-        related_type: 'booking',
-        related_id: booking.id
+      await insertOne(collections.notifications, {
+        user_id: a._id,
+        message: `❌ ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) ถูกยกเลิกโดยผู้ยืม`,
+        type: 'cancelled', related_type: 'booking', related_id: booking._id,
+        is_read: false, created_at: new Date(),
       })
     }
 
-    broadcastToRole('admin', 'data-changed', { action: 'cancel', booking_id: booking.id })
+    broadcastToRole('admin', 'data-changed', { action: 'cancel', booking_id: str(booking._id) })
 
     res.json({ message: 'ยกเลิกการจองสำเร็จ' })
   } catch (err) {
@@ -263,76 +324,84 @@ router.post('/bookings', async (req, res) => {
       return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
     }
 
-    const result = await transaction(async (tx) => {
-      // Same reasoning as the authenticated route: lock the car so two public
-      // submissions for the same car cannot both pass the overlap check.
-      await tx.lockRow('cars', car_id)
+    const carObjectId = toId(car_id)
 
-      const car = await tx.get('SELECT * FROM cars WHERE id = ?', [car_id])
+    const result = await withLock(`car:${str(car_id)}`, async () => {
+      const car = carObjectId ? await findOne(collections.cars, { _id: carObjectId }) : null
       if (!car) throw httpError(404, 'ไม่พบรถยนต์')
       if (car.status !== 'available') {
         throw httpError(400, 'รถยนต์นี้ไม่พร้อมให้เช่า')
       }
 
-      const overlap = await tx.get(
-        `SELECT id FROM bookings WHERE car_id = ? AND status IN ('approved','pending')
-         AND start_date <= ? AND end_date >= ?`,
-        [car_id, end_date, start_date]
-      )
+      const overlap = await findOne(collections.bookings, {
+        car_id: car._id,
+        status: { $in: ['approved', 'pending'] },
+        start_date: { $lte: end_date },
+        end_date: { $gte: start_date },
+      })
       if (overlap) {
         throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว')
       }
 
-      let user = null
+      let borrower = null
       if (user_id) {
-        user = await tx.get('SELECT id, name, phone FROM users WHERE id = ?', [user_id])
+        const uid = toId(user_id)
+        borrower = uid ? await findOne(collections.users, { _id: uid }) : null
       }
-      if (!user) {
-        user = phone
-          ? await tx.get('SELECT id, name, phone FROM users WHERE name = ? AND phone = ?', [name, phone])
-          : await tx.get('SELECT id, name, phone FROM users WHERE name = ?', [name])
+      if (!borrower) {
+        borrower = phone
+          ? await findOne(collections.users, { name, phone })
+          : await findOne(collections.users, { name })
       }
 
-      if (!user) {
-        const userId = await tx.insert('users', {
+      if (!borrower) {
+        const userId = await insertOne(collections.users, {
           name,
-          email: await uniquePublicEmail(tx, name),
+          email: await uniquePublicEmail(name),
           password: '',
           phone: phone || '',
           id_card: req.body.id_card || '',
-          role: 'user'
+          avatar: '',
+          role: 'user',
+          token_version: 0,
+          created_at: new Date(),
         })
-        user = { id: userId, name }
+        borrower = { _id: userId, name }
       }
 
-      const bookingId = await tx.insert('bookings', {
-        user_id: user.id,
-        car_id,
+      const bookingId = await insertOne(collections.bookings, {
+        user_id: borrower._id,
+        car_id: car._id,
         start_date,
         end_date,
         purpose: purpose || '',
-        status: 'pending'
+        status: 'pending',
+        admin_notes: '',
+        created_at: new Date(),
+        updated_at: new Date(),
       })
 
-      return { car, user, bookingId }
+      return { car, borrower, bookingId }
     })
 
-    const { car, user: borrower, bookingId } = result
-    const admins = await all('SELECT id FROM users WHERE role = ?', ['admin'])
+    const { car, borrower, bookingId } = result
+    const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     const notifMsg = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
     for (const a of admins) {
-      await insert('notifications', {
-        user_id: a.id,
+      await insertOne(collections.notifications, {
+        user_id: a._id,
         message: notifMsg,
         type: 'booking_request',
         related_type: 'booking',
-        related_id: bookingId
+        related_id: bookingId,
+        is_read: false,
+        created_at: new Date(),
       })
     }
 
     broadcastToRole('admin', 'data-changed', {
       action: 'new-booking',
-      booking_id: bookingId,
+      booking_id: str(bookingId),
       user_name: (borrower && borrower.name) || name || 'ผู้ยืม',
       car_brand: car.brand,
       car_model: car.model,

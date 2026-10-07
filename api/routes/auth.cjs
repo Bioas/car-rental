@@ -1,10 +1,24 @@
 const { Router } = require('express')
 const bcrypt = require('bcryptjs')
-const { get, insert, update } = require('../db.cjs')
+const { collections, findOne, insertOne, updateOne, toId, str } = require('../db.cjs')
 const { generateToken, authMiddleware } = require('../middleware/auth.cjs')
 const { sendError } = require('../lib/http-error.cjs')
 
 const router = Router()
+
+/** Public projection of a user document — never the password or token_version. */
+function publicUser(u) {
+  return {
+    id: str(u._id),
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    phone: u.phone || '',
+    id_card: u.id_card || '',
+    avatar: u.avatar || '',
+    created_at: u.created_at,
+  }
+}
 
 router.post('/register', async (req, res) => {
   try {
@@ -19,7 +33,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' })
     }
 
-    const existing = await get('SELECT id FROM users WHERE email = ?', [email])
+    const existing = await findOne(collections.users, { email })
     if (existing) {
       return res.status(409).json({ error: 'อีเมลนี้มีในระบบแล้ว' })
     }
@@ -27,13 +41,22 @@ router.post('/register', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10)
     // Public self-registration always creates a plain user. Admin accounts are
     // provisioned by `npm run seed` or by an existing admin — never by being the
-    // first row in the table (which previously let anyone become admin on a
-    // fresh/ephemeral database).
-    const id = await insert('users', { name, email, password: hashed, phone: phone || '', id_card: id_card || '', role: 'user' })
-    const user = await get('SELECT id, name, email, role, phone, id_card, created_at FROM users WHERE id = ?', [id])
-    const token = generateToken(user)
+    // first row (which previously let anyone become admin on a fresh database).
+    let id
+    try {
+      id = await insertOne(collections.users, {
+        name, email, password: hashed, phone: phone || '', id_card: id_card || '',
+        avatar: '', role: 'user', token_version: 0, created_at: new Date(),
+      })
+    } catch (err) {
+      // Lost a race with another registration for the same email.
+      if (err && err.code === 11000) return res.status(409).json({ error: 'อีเมลนี้มีในระบบแล้ว' })
+      throw err
+    }
 
-    res.status(201).json({ user, token })
+    const user = await findOne(collections.users, { _id: id })
+    const token = generateToken(user)
+    res.status(201).json({ user: publicUser(user), token })
   } catch (err) {
     console.error('[auth] register failed:', err)
     res.status(500).json({ error: (err && err.message) || 'Registration failed' })
@@ -47,19 +70,18 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' })
     }
 
-    const user = await get('SELECT * FROM users WHERE email = ?', [email])
+    const user = await findOne(collections.users, { email })
     if (!user) {
       return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' })
     }
 
-    const valid = bcrypt.compareSync(password, user.password)
+    const valid = await bcrypt.compare(password, user.password || '')
     if (!valid) {
       return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' })
     }
 
     const token = generateToken(user)
-    const { password: _, token_version, ...safe } = user
-    res.json({ user: safe, token })
+    res.json({ user: publicUser(user), token })
   } catch (err) {
     sendError(res, err)
   }
@@ -67,9 +89,9 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await get('SELECT id, name, email, role, phone, id_card, avatar, created_at FROM users WHERE id = ?', [req.user.id])
+    const user = await findOne(collections.users, { _id: toId(req.user.id) })
     if (!user) return res.status(404).json({ error: 'User not found' })
-    res.json({ user })
+    res.json({ user: publicUser(user) })
   } catch (err) {
     sendError(res, err)
   }
@@ -83,10 +105,10 @@ router.put('/me', authMiddleware, async (req, res) => {
     if (phone !== undefined) updates.phone = phone
     if (id_card !== undefined) updates.id_card = id_card
     if (Object.keys(updates).length > 0) {
-      await update('users', updates, 'id', req.user.id)
+      await updateOne(collections.users, { _id: toId(req.user.id) }, { $set: updates })
     }
-    const user = await get('SELECT id, name, email, role, phone, id_card, avatar, created_at FROM users WHERE id = ?', [req.user.id])
-    res.json({ user })
+    const user = await findOne(collections.users, { _id: toId(req.user.id) })
+    res.json({ user: publicUser(user) })
   } catch (err) {
     sendError(res, err)
   }

@@ -1,41 +1,53 @@
 // Shared test harness.
 //
-// Each test file gets its own throwaway SQLite file, so files are isolated from
-// each other and from the developer's real `data.sqlite`.
+// The tests need a real MongoDB. Each test file gets its own database, so files
+// can run in parallel without interfering, and a wipe at start keeps runs
+// repeatable. (Atlas free tier forbids `dropDatabase`, so collections are
+// emptied with deleteMany instead of dropping the database.)
 //
-// The API reads its configuration when it is required, so `prepareDatabase()`
-// must run *before* anything requires `../db.cjs` or `../server.cjs`:
+// The API reads its configuration lazily (at connect time), so `prepareDatabase()`
+// must run *before* anything issues a query:
 //
-//   await prepareDatabase()          // top-level await
+//   await prepareDatabase('api')     // top-level await
 //   const app = require('../server.cjs')
 
 import { createRequire } from 'node:module'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import request from 'supertest'
 
 export const require = createRequire(import.meta.url)
 
-let tempDir = null
+const DEFAULT_URI = 'mongodb://127.0.0.1:27017'
 
-export async function prepareDatabase() {
+export async function prepareDatabase(name = 'main') {
   // Never let a developer's `.env` (or a stray exported variable) redirect the
   // tests at the real database, or override the test JWT secret.
   process.env.CARRENTAL_NO_ENV_FILE = '1'
+  process.env.MONGODB_URI = process.env.TEST_MONGODB_URI || process.env.MONGODB_URI || DEFAULT_URI
+  process.env.MONGODB_DB = `car-rental-test-${name}`
   process.env.JWT_SECRET = 'test-secret-key-at-least-16-chars'
   process.env.SSE_REVALIDATE_MS = '150'
+  process.env.SSE_KEEPALIVE_MS = '60000'
 
-  tempDir = mkdtempSync(path.join(tmpdir(), 'car-rental-test-'))
-  process.env.SQLITE_PATH = path.join(tempDir, 'data.sqlite')
+  const db = require('../db.cjs')
+  await db.connect()
+  await db.deleteMany(db.collections.users, {})
+  await db.deleteMany(db.collections.cars, {})
+  await db.deleteMany(db.collections.bookings, {})
+  await db.deleteMany(db.collections.notifications, {})
 
-  return 'sqlite'
+  return 'mongodb'
 }
 
-export function cleanupDatabase() {
-  if (tempDir) {
-    rmSync(tempDir, { recursive: true, force: true })
-    tempDir = null
+export async function cleanupDatabase() {
+  try {
+    const db = require('../db.cjs')
+    await db.deleteMany(db.collections.users, {})
+    await db.deleteMany(db.collections.cars, {})
+    await db.deleteMany(db.collections.bookings, {})
+    await db.deleteMany(db.collections.notifications, {})
+    await db.close()
+  } catch {
+    /* nothing to clean up */
   }
 }
 

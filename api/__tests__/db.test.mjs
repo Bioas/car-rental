@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { prepareDatabase, cleanupDatabase, require } from './helpers.mjs'
 
-await prepareDatabase()
+await prepareDatabase('db')
 const db = require('../db.cjs')
 
 describe('database layer', () => {
@@ -10,97 +10,72 @@ describe('database layer', () => {
   })
 
   afterAll(async () => {
-    await db.close()
-    cleanupDatabase()
+    await cleanupDatabase()
   })
 
-  async function columns(table) {
-    return (await db.all(`PRAGMA table_info(${table})`)).map((c) => c.name)
-  }
-
-  it('uses the sqlite driver', () => {
-    expect(db.kind).toBe('sqlite')
+  it('uses the mongodb driver', () => {
+    expect(db.kind).toBe('mongodb')
+    expect(db.describe()).toContain('mongodb')
   })
 
   it('seeds the documented accounts and sample cars', async () => {
-    const users = await db.all('SELECT email, role FROM users ORDER BY email')
-    expect(users.map((u) => u.email)).toContain('admin@carrental.local')
+    const users = await db.find(db.collections.users, {})
+    const emails = users.map((u) => u.email)
+    expect(emails).toContain('admin@carrental.local')
     expect(users.find((u) => u.email === 'admin@carrental.local').role).toBe('admin')
-    expect((await db.all('SELECT id FROM cars')).length).toBeGreaterThan(0)
+    expect(await db.countDocuments(db.collections.cars, {})).toBeGreaterThan(0)
   })
 
-  it('dropped the dead cars.image column', async () => {
-    expect(await columns('cars')).not.toContain('image')
+  it('has no dead cars.image field', async () => {
+    const car = await db.findOne(db.collections.cars, {})
+    expect(car.image).toBeUndefined()
   })
 
-  it('still exposes users.token_version', async () => {
-    expect(await columns('users')).toContain('token_version')
+  it('stores users with a token_version', async () => {
+    const user = await db.findOne(db.collections.users, { email: 'admin@carrental.local' })
+    expect(user.token_version).toBe(0)
   })
 
-  it('returns a numeric generated id from insert()', async () => {
-    const id = await db.insert('cars', { license_plate: 'DRV 001', brand: 'Test', model: 'One' })
-    expect(typeof id).toBe('number')
-    expect(id).toBeGreaterThan(0)
+  it('returns an ObjectId from insertOne', async () => {
+    const id = await db.insertOne(db.collections.cars, { license_plate: 'DRV 001', brand: 'Test', model: 'One', status: 'available', created_at: new Date() })
+    expect(id).toBeInstanceOf(db.ObjectId)
+    expect(db.str(id)).toMatch(/^[0-9a-f]{24}$/)
   })
 
   it('counts come back as numbers, not strings', async () => {
-    const row = await db.get('SELECT COUNT(*) as count FROM cars')
-    expect(typeof row.count).toBe('number')
-  })
-
-  it('binds undefined as NULL instead of throwing', async () => {
-    const row = await db.get('SELECT ? as value', [undefined])
-    expect(row.value).toBeNull()
+    const count = await db.countDocuments(db.collections.cars, {})
+    expect(typeof count).toBe('number')
   })
 
   it('reports how many rows an update touched', async () => {
-    const id = await db.insert('cars', { license_plate: 'DRV 005', brand: 'Counted', model: 'Five' })
-    expect(await db.run('UPDATE cars SET brand = ? WHERE id = ?', ['Counted 2', id])).toBe(1)
-    expect(await db.run('UPDATE cars SET brand = ? WHERE id = ?', ['nope', 999_999])).toBe(0)
+    const id = await db.insertOne(db.collections.cars, { license_plate: 'DRV 005', brand: 'Counted', model: 'Five', status: 'available', created_at: new Date() })
+    const hit = await db.updateOne(db.collections.cars, { _id: id }, { $set: { brand: 'Counted 2' } })
+    expect(hit.matchedCount).toBe(1)
+    const miss = await db.updateOne(db.collections.cars, { _id: db.toId('000000000000000000000000') }, { $set: { brand: 'nope' } })
+    expect(miss.matchedCount).toBe(0)
   })
 
-  it('commits a transaction', async () => {
-    const id = await db.insert('cars', { license_plate: 'DRV 002', brand: 'Before', model: 'Two' })
-    await db.transaction(async (tx) => {
-      await tx.run('UPDATE cars SET brand = ? WHERE id = ?', ['After', id])
-    })
-    expect((await db.get('SELECT brand FROM cars WHERE id = ?', [id])).brand).toBe('After')
+  it('deletes a document', async () => {
+    const id = await db.insertOne(db.collections.cars, { license_plate: 'DRV 007', brand: 'Gone', model: 'Seven', status: 'available', created_at: new Date() })
+    const removed = await db.deleteOne(db.collections.cars, { _id: id })
+    expect(removed.deletedCount).toBe(1)
+    expect(await db.findOne(db.collections.cars, { _id: id })).toBeNull()
   })
 
-  it('rolls the whole transaction back when something throws', async () => {
-    const id = await db.insert('cars', { license_plate: 'DRV 003', brand: 'Original', model: 'Three' })
-    await expect(db.transaction(async (tx) => {
-      await tx.run('UPDATE cars SET brand = ? WHERE id = ?', ['ShouldNotPersist', id])
-      await tx.insert('cars', { license_plate: 'DRV 004', brand: 'Ghost', model: 'Four' })
-      throw new Error('boom')
-    })).rejects.toThrow('boom')
-
-    expect((await db.get('SELECT brand FROM cars WHERE id = ?', [id])).brand).toBe('Original')
-    expect(await db.get("SELECT id FROM cars WHERE license_plate = 'DRV 004'")).toBeNull()
+  it('enforces the unique email index', async () => {
+    await expect(db.insertOne(db.collections.users, {
+      name: 'Dup', email: 'admin@carrental.local', password: 'x', role: 'user', token_version: 0, created_at: new Date(),
+    })).rejects.toMatchObject({ code: 11000 })
   })
 
-  it('runs transactions one at a time', async () => {
-    const id = await db.insert('cars', { license_plate: 'DRV 006', brand: 'Queue', model: 'Six' })
-    const order = []
-    await Promise.all([
-      db.transaction(async (tx) => {
-        order.push('first:start')
-        await tx.run('UPDATE cars SET brand = ? WHERE id = ?', ['First', id])
-        order.push('first:end')
-      }),
-      db.transaction(async (tx) => {
-        order.push('second:start')
-        await tx.run('UPDATE cars SET brand = ? WHERE id = ?', ['Second', id])
-        order.push('second:end')
-      }),
-    ])
-    expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
+  it('turns a malformed id into null instead of throwing', () => {
+    expect(db.toId('not-an-id')).toBeNull()
+    expect(db.toId('999999')).toBeNull()
   })
 
-  it('can take a row lock inside a transaction', async () => {
-    const car = await db.get('SELECT id FROM cars LIMIT 1')
-    await expect(db.transaction(async (tx) => {
-      await tx.lockRow('cars', car.id)
-    })).resolves.toBeUndefined()
+  it('serializes ids back to strings', () => {
+    const oid = new db.ObjectId()
+    expect(db.str(oid)).toBe(oid.toString())
+    expect(db.str(null)).toBeNull()
   })
 })

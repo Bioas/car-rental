@@ -2,12 +2,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
 import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, USER, auth, dateRange } from './helpers.mjs'
 
-// The overlap check is a read-then-write, so without a transaction two requests
+// The overlap check is a read-then-write, so without serialization two requests
 // arriving at the same instant would both see "no conflict" and both insert.
 // These tests fire many identical requests at once and assert that exactly one
-// wins: transactions are queued, so the loser always sees the winner's booking.
+// wins: writes for the same car are serialized, so the loser always sees the
+// winner's booking.
 
-await prepareDatabase()
+await prepareDatabase('concurrency')
 const app = require('../server.cjs')
 const db = require('../db.cjs')
 
@@ -21,8 +22,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await db.close()
-  cleanupDatabase()
+  await cleanupDatabase()
 })
 
 async function firstCarId() {
@@ -54,10 +54,12 @@ describe(`concurrent authenticated bookings`, () => {
     expect(created.length).toBe(1)
     expect(conflicts.length).toBe(9)
 
-    const rows = await db.all(
-      "SELECT id FROM bookings WHERE car_id = ? AND status IN ('pending','approved') AND start_date <= ? AND end_date >= ?",
-      [carId, end_date, start_date]
-    )
+    const rows = await db.find(db.collections.bookings, {
+      car_id: db.toId(carId),
+      status: { $in: ['pending', 'approved'] },
+      start_date: { $lte: end_date },
+      end_date: { $gte: start_date },
+    })
     expect(rows.length).toBe(1)
   })
 
@@ -100,7 +102,7 @@ describe(`concurrent public bookings`, () => {
     expect(conflicts.length).toBe(7)
 
     // The losing attempts must not have left stray borrower accounts behind.
-    const users = await db.all('SELECT id FROM users WHERE name = ?', [name])
+    const users = await db.find(db.collections.users, { name })
     expect(users.length).toBe(1)
   })
 })

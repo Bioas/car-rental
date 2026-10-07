@@ -1,9 +1,5 @@
 // Minimal `.env` loader — no dependency, ~30 lines.
 //
-// Why this exists: the README tells you to `cp .env.example .env`, but nothing
-// in the project ever read that file, so values such as `JWT_SECRET` or
-// `SQLITE_PATH` placed in `.env` were silently ignored.
-//
 // It must run BEFORE anything that reads configuration at require time —
 // `api/middleware/auth.cjs` resolves the JWT secret while it is being loaded —
 // which is why the entry points call it as their first statement.
@@ -21,8 +17,8 @@ const DEFAULT_FILE = path.join(__dirname, '..', '..', '.env')
  * @returns {boolean} whether a file was found and read
  */
 function loadEnv(file = DEFAULT_FILE) {
-  // The test suite sets its own throwaway database; it must never be redirected
-  // to whatever `.env` happens to point at (e.g. a production database).
+  // The test suite points itself at a throwaway database; it must never be
+  // redirected to whatever `.env` happens to point at (e.g. production).
   if (process.env.CARRENTAL_NO_ENV_FILE) return false
   if (!fs.existsSync(file)) return false
 

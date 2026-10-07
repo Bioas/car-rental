@@ -5,7 +5,7 @@ import {
   loginAs, ADMIN, USER, auth, dateRange,
 } from './helpers.mjs'
 
-await prepareDatabase()
+await prepareDatabase('api')
 const app = require('../server.cjs')
 const db = require('../db.cjs')
 
@@ -19,8 +19,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-  await db.close()
-  cleanupDatabase()
+  await cleanupDatabase()
 })
 
 async function cars() {
@@ -52,7 +51,7 @@ describe(`auth`, () => {
     expect(res.status).toBe(201)
     expect(res.body.user.role).toBe('user')
 
-    const rows = await db.all('SELECT role FROM users WHERE email = ?', [email])
+    const rows = await db.find(db.collections.users, { email })
     expect(rows[0].role).toBe('user')
   })
 
@@ -154,7 +153,7 @@ describe(`bookings`, () => {
     const { start_date, end_date } = dateRange(5)
     const res = await request(app).post('/api/bookings')
       .set(auth(userToken))
-      .send({ car_id: 999_999, start_date, end_date })
+      .send({ car_id: '000000000000000000000000', start_date, end_date })
     expect(res.status).toBe(404)
   })
 
@@ -253,20 +252,21 @@ describe(`admin`, () => {
   })
 
   it('refuses to demote or delete the last admin', async () => {
-    const admins = await db.all("SELECT id FROM users WHERE role = 'admin'")
+    const admins = await db.find(db.collections.users, { role: 'admin' })
     expect(admins.length).toBe(1)
+    const adminId = db.str(admins[0]._id)
 
-    const demote = await request(app).put(`/api/admin/users/${admins[0].id}`)
+    const demote = await request(app).put(`/api/admin/users/${adminId}`)
       .set(auth(adminToken)).send({ role: 'user' })
     expect(demote.status).toBe(400)
 
-    const remove = await request(app).delete(`/api/admin/users/${admins[0].id}`).set(auth(adminToken))
+    const remove = await request(app).delete(`/api/admin/users/${adminId}`).set(auth(adminToken))
     expect(remove.status).toBe(400)
   })
 
   it('rejects an unknown role', async () => {
-    const target = await db.get("SELECT id FROM users WHERE role = 'user'")
-    const res = await request(app).put(`/api/admin/users/${target.id}`)
+    const target = await db.findOne(db.collections.users, { role: 'user' })
+    const res = await request(app).put(`/api/admin/users/${db.str(target._id)}`)
       .set(auth(adminToken)).send({ role: 'superuser' })
     expect(res.status).toBe(400)
   })
@@ -299,17 +299,17 @@ describe(`admin`, () => {
   })
 
   it('records a return only for approved bookings', async () => {
-    const notApproved = await db.get("SELECT id FROM bookings WHERE status = 'pending' LIMIT 1")
+    const notApproved = await db.findOne(db.collections.bookings, { status: 'pending' })
     if (notApproved) {
-      expect((await request(app).put(`/api/admin/bookings/${notApproved.id}/return`).set(auth(adminToken))).status).toBe(400)
+      expect((await request(app).put(`/api/admin/bookings/${db.str(notApproved._id)}/return`).set(auth(adminToken))).status).toBe(400)
     }
     const res = await request(app).put(`/api/admin/bookings/${pendingBookingId}/return`).set(auth(adminToken))
     expect(res.status).toBe(200)
   })
 
   it('does not allow deleting your own account', async () => {
-    const me = await db.get('SELECT id FROM users WHERE email = ?', [ADMIN.email])
-    const res = await request(app).delete(`/api/admin/users/${me.id}`).set(auth(adminToken))
+    const me = await db.findOne(db.collections.users, { email: ADMIN.email })
+    const res = await request(app).delete(`/api/admin/users/${db.str(me._id)}`).set(auth(adminToken))
     expect(res.status).toBe(400)
   })
 })
@@ -343,8 +343,8 @@ describe(`public booking`, () => {
       .send({ ...borrower, car_id: bookedCarId, start_date, end_date, id_card: '1-2345-67890-12-3' })
     expect(res.status).toBe(201)
 
-    const row = await db.get('SELECT id FROM bookings WHERE car_id = ? ORDER BY id DESC', [bookedCarId])
-    publicBookingId = row.id
+    const row = await db.findOne(db.collections.bookings, { car_id: db.toId(bookedCarId) }, { sort: { _id: -1 } })
+    publicBookingId = db.str(row._id)
   })
 
   it('gives a second borrower with the same name a distinct account', async () => {
@@ -353,7 +353,7 @@ describe(`public booking`, () => {
       .send({ name: borrower.name, phone: '0899999999', car_id: bookedCarId, start_date, end_date })
     expect(res.status).toBe(201)
 
-    const users = await db.all('SELECT email FROM users WHERE name = ?', [borrower.name])
+    const users = await db.find(db.collections.users, { name: borrower.name })
     expect(users.length).toBe(2)
     expect(new Set(users.map((u) => u.email)).size).toBe(2)
   })
@@ -401,17 +401,18 @@ describe(`public booking`, () => {
     await request(app).post('/api/public/bookings')
       .send({ ...borrower, car_id: bookedCarId, start_date, end_date })
 
-    const booking = await db.get(
-      "SELECT id FROM bookings WHERE car_id = ? AND status = 'pending' ORDER BY id DESC",
-      [bookedCarId]
+    const booking = await db.findOne(
+      db.collections.bookings,
+      { car_id: db.toId(bookedCarId), status: 'pending' },
+      { sort: { _id: -1 } }
     )
-    expect((await request(app).put(`/api/admin/bookings/${booking.id}/approve`).set(auth(adminToken))).status).toBe(200)
+    expect((await request(app).put(`/api/admin/bookings/${db.str(booking._id)}/approve`).set(auth(adminToken))).status).toBe(200)
 
-    const first = await request(app).post(`/api/public/bookings/${booking.id}/return`)
+    const first = await request(app).post(`/api/public/bookings/${db.str(booking._id)}/return`)
       .send({ id_card: '1234567890123' })
     expect(first.status).toBe(200)
 
-    const second = await request(app).post(`/api/public/bookings/${booking.id}/return`)
+    const second = await request(app).post(`/api/public/bookings/${db.str(booking._id)}/return`)
       .send({ id_card: '1234567890123' })
     expect(second.status).toBe(400)
   })
@@ -420,11 +421,12 @@ describe(`public booking`, () => {
     const { start_date, end_date } = dateRange(24)
     await request(app).post('/api/public/bookings')
       .send({ ...borrower, car_id: bookedCarId, start_date, end_date })
-    const booking = await db.get(
-      "SELECT id FROM bookings WHERE car_id = ? AND status = 'pending' ORDER BY id DESC",
-      [bookedCarId]
+    const booking = await db.findOne(
+      db.collections.bookings,
+      { car_id: db.toId(bookedCarId), status: 'pending' },
+      { sort: { _id: -1 } }
     )
-    const res = await request(app).post(`/api/public/bookings/${booking.id}/return`)
+    const res = await request(app).post(`/api/public/bookings/${db.str(booking._id)}/return`)
       .send({ id_card: '1234567890123' })
     expect(res.status).toBe(400)
   })
