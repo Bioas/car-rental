@@ -1,3 +1,15 @@
+/* boxicons ships its @font-face without font-display, which can leave icons
+   invisible while the icon font loads. Re-declare the same face (this file is
+   imported after boxicons' css) with font-display: swap and the modern format
+   only — legacy browsers fall back to boxicons' own, all browsers get swap. */
+@font-face {
+  font-family: 'boxicons';
+  font-style: normal;
+  font-weight: normal;
+  src: url('../../node_modules/boxicons/fonts/boxicons.woff2') format('woff2');
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

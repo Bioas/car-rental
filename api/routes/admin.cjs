@@ -316,28 +316,34 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/bookings', async (req, res) => {
   try {
     const { status } = req.query
+    const useStatusFilter = status && status !== 'all'
+    const filter = useStatusFilter ? { status } : {}
+    const paging = pageParams(req.query)
+    const findOptions = { sort: { created_at: -1 } }
+    if (paging) {
+      findOptions.skip = paging.offset
+      findOptions.limit = paging.limit
+    }
 
     // Per-status totals power the filter chips without shipping every row.
-    const countRows = await aggregate(collections.bookings, [
-      { $group: { _id: '$status', count: { $sum: 1 } } },
+    // The three queries below are independent, so they run together.
+    const [countRows, rows, total] = await Promise.all([
+      aggregate(collections.bookings, [
+        { $group: { _id: '$status', count: { $sum: 1 } } },
+      ]),
+      find(collections.bookings, filter, findOptions),
+      paging ? countDocuments(collections.bookings, filter) : Promise.resolve(null),
     ])
+
     const counts = { all: 0, pending: 0, approved: 0, rejected: 0, returned: 0 }
     for (const row of countRows) {
       counts[row._id] = row.count
       counts.all += row.count
     }
 
-    const useStatusFilter = status && status !== 'all'
-    const filter = useStatusFilter ? { status } : {}
-
-    const paging = pageParams(req.query)
     if (!paging) {
-      const rows = await find(collections.bookings, filter, { sort: { created_at: -1 } })
       return res.json({ bookings: await enrichBookings(rows), counts })
     }
-
-    const total = await countDocuments(collections.bookings, filter)
-    const rows = await find(collections.bookings, filter, { sort: { created_at: -1 }, skip: paging.offset, limit: paging.limit })
 
     res.json({
       bookings: await enrichBookings(rows),
@@ -467,12 +473,18 @@ router.put('/bookings/:id/return', async (req, res) => {
 
 router.get('/reports', async (req, res) => {
   try {
+    // Only the fields the aggregation actually reads are projected — this
+    // endpoint loads every row, so dropping password hashes, id cards, notes
+    // and images keeps it an order of magnitude lighter.
     const [cars, users, bookings] = await Promise.all([
-      find(collections.cars, {}),
-      find(collections.users, {}),
-      find(collections.bookings, {}),
+      find(collections.cars, {}, { projection: { brand: 1, model: 1, license_plate: 1, status: 1 } }),
+      find(collections.users, {}, { projection: { name: 1, email: 1 } }),
+      find(collections.bookings, {}, {
+        projection: { car_id: 1, user_id: 1, status: 1, created_at: 1, start_date: 1, end_date: 1 },
+      }),
     ])
 
+    const today = new Date().toISOString().split('T')[0]
     const stats = {
       totalCars: cars.length,
       availableCars: cars.filter((c) => c.status === 'available').length,
@@ -481,6 +493,7 @@ router.get('/reports', async (req, res) => {
       pendingBookings: bookings.filter((b) => b.status === 'pending').length,
       approvedBookings: bookings.filter((b) => b.status === 'approved').length,
       returnedBookings: bookings.filter((b) => b.status === 'returned').length,
+      activeToday: bookings.filter((b) => b.status === 'approved' && b.start_date <= today && b.end_date >= today).length,
     }
 
     const countByCar = new Map()

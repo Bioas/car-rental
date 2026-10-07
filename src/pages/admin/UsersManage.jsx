@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { apiGet, invalidateApi } from '../../lib/apiCache'
 import { Pager } from '../../components/ui/pager'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
@@ -73,9 +74,10 @@ export default function UsersManage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setShowModal(false)
+      invalidateApi()
       // A new user lands at the top of page 1; jump there so it is visible.
       if (!isEdit && page !== 1) setPage(1)
-      else await fetchUsers()
+      else await fetchUsers(true)
     } catch {
       setError('เกิดข้อผิดพลาด')
     } finally {
@@ -87,15 +89,16 @@ export default function UsersManage() {
     if (!confirm('ลบผู้ใช้นี้?')) return
     try {
       await fetch(`/api/admin/users/${id}`, { method: 'DELETE', headers: authHeaders() })
-      await fetchUsers()
+      invalidateApi()
+      await fetchUsers(true)
     } catch (e) { console.error(e) }
   }
 
-  async function fetchUsers() {
+  async function fetchUsers(force = false) {
     try {
-      const res = await fetch(`/api/admin/users?page=${page}&limit=${PAGE_SIZE}`, { headers: authHeaders() })
+      const res = await apiGet(`/api/admin/users?page=${page}&limit=${PAGE_SIZE}`, { headers: authHeaders(), force })
       if (res.ok) {
-        const data = await res.json()
+        const data = res.data
         const rows = data.users || []
         setUsers(rows)
         setPages(data.pages || 1)

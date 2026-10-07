@@ -1,5 +1,5 @@
 const { Router } = require('express')
-const { collections, find, findOne, insertOne, toId, str, withLock } = require('../db.cjs')
+const { collections, find, findOne, insertOne, insertMany, toId, str, withLock } = require('../db.cjs')
 const { authMiddleware } = require('../middleware/auth.cjs')
 const { isValidDate } = require('../lib/dates.cjs')
 const { httpError, sendError } = require('../lib/http-error.cjs')
@@ -75,9 +75,9 @@ router.post('/', authMiddleware, async (req, res) => {
     // not fail the booking request.
     try {
       const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
-      const message = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
-      for (const a of admins) {
-        await insertOne(collections.notifications, {
+      if (admins.length) {
+        const message = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
+        await insertMany(collections.notifications, admins.map((a) => ({
           user_id: a._id,
           message,
           type: 'booking_request',
@@ -85,7 +85,7 @@ router.post('/', authMiddleware, async (req, res) => {
           related_id: booking._id,
           is_read: false,
           created_at: new Date(),
-        })
+        })))
       }
     } catch (err) {
       console.error('[bookings] notify admins failed:', err.message)

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
+import { apiGet, invalidateApi } from '../lib/apiCache'
 import { timeAgo } from '../lib/constants'
 import { Skeleton, SkeletonList } from '../components/ui/skeleton'
 
@@ -85,9 +86,9 @@ export default function Notifications() {
 
   async function fetchNotifications() {
     try {
-      const res = await fetch('/api/notifications', { headers: authHeaders() })
+      const res = await apiGet('/api/notifications', { headers: authHeaders(), ttl: 10000 })
       if (res.ok) {
-        const data = await res.json()
+        const data = res.data
         setNotifications(data.notifications || [])
         setUnread(data.unread || 0)
         setNotificationCount(data.unread || 0)
@@ -107,6 +108,7 @@ export default function Notifications() {
         headers: authHeaders()
       })
       if (res.ok) {
+        invalidateApi('/api/notifications')
         setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: 1 } : n))
         setUnread(prev => Math.max(0, prev - 1))
         setNotificationCount(prev => Math.max(0, prev - 1))
@@ -131,6 +133,7 @@ export default function Notifications() {
         headers: authHeaders()
       })
       if (res.ok) {
+        invalidateApi('/api/notifications')
         setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })))
         setUnread(0)
         setNotificationCount(0)

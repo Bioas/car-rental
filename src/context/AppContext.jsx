@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { invalidateApi } from '../lib/apiCache'
 
 const AppContext = createContext(null)
 
@@ -25,6 +26,10 @@ export function AppProvider({ children }) {
   const sseErrorRef = useRef(0)
   const fetchUserRef = useRef(null)
   const logoutRef = useRef(null)
+  const refreshTimerRef = useRef(null)
+  const pendingEventsRef = useRef(0)
+  const fetchingCountRef = useRef(false)
+  const lastNotifFetchRef = useRef(0)
 
   const isLoggedIn = !!token
   const isAdmin = user?.role === 'admin'
@@ -65,6 +70,7 @@ export function AppProvider({ children }) {
     setUser(data.user)
     setUserLoaded(true)
     localStorage.setItem('token', data.token)
+    invalidateApi()
   }, [])
 
   const register = useCallback(async (name, email, password, phone) => {
@@ -79,6 +85,7 @@ export function AppProvider({ children }) {
     setUser(data.user)
     setUserLoaded(true)
     localStorage.setItem('token', data.token)
+    invalidateApi()
   }, [])
 
   const fetchUser = useCallback(async () => {
@@ -102,6 +109,7 @@ export function AppProvider({ children }) {
   }, [token])
 
   const logout = useCallback(() => {
+    invalidateApi()
     setUser(null)
     setToken('')
     localStorage.removeItem('token')
@@ -115,6 +123,21 @@ export function AppProvider({ children }) {
     logoutRef.current = logout
   }, [fetchUser, logout])
 
+  // Realtime events can arrive in bursts (one admin action fans out to every
+  // open tab). Coalesce them so pages refetch once instead of N times, and the
+  // notification count is fetched once after the dust settles.
+  const scheduleRefresh = useCallback(() => {
+    pendingEventsRef.current += 1
+    if (refreshTimerRef.current) return
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null
+      const count = pendingEventsRef.current
+      pendingEventsRef.current = 0
+      setRefreshSignal(prev => prev + count)
+      fetchNotificationCount()
+    }, 300)
+  }, [])
+
   const connectSSE = useCallback(() => {
     const t = localStorage.getItem('token')
     if (!t) return
@@ -122,8 +145,7 @@ export function AppProvider({ children }) {
     const es = new EventSource(`${API}/events?token=${encodeURIComponent(t)}`)
     es.onopen = () => { sseErrorRef.current = 0; setSseConnected(true) }
     es.addEventListener('data-changed', (e) => {
-      setRefreshSignal(prev => prev + 1)
-      fetchNotificationCount()
+      scheduleRefresh()
       try {
         const data = JSON.parse(e.data)
         if (data.action === 'new-booking') {
@@ -156,6 +178,13 @@ export function AppProvider({ children }) {
   }, [])
 
   const fetchNotificationCount = useCallback(async () => {
+    // Skip overlapping calls and throttle to once a second — realtime bursts
+    // must not fan out one notifications query per event.
+    if (fetchingCountRef.current) return
+    const now = Date.now()
+    if (now - lastNotifFetchRef.current < 1000) return
+    lastNotifFetchRef.current = now
+    fetchingCountRef.current = true
     try {
       const t = localStorage.getItem('token')
       if (!t) return
@@ -166,7 +195,9 @@ export function AppProvider({ children }) {
         const data = await res.json()
         setNotificationCount(data.unread)
       }
-    } catch {}
+    } catch {} finally {
+      fetchingCountRef.current = false
+    }
   }, [])
 
   // Listen for cross-tab token changes (sync localStorage across tabs)

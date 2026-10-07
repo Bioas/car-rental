@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { apiGet, invalidateApi } from '../../lib/apiCache'
 import { statusLabel, badgeClass } from '../../lib/constants'
 import { Toast } from '../../components/ui/toast'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
@@ -63,7 +64,8 @@ export default function CarsManage() {
         return
       }
       setShowModal(false)
-      await fetchCars()
+      invalidateApi()
+      await fetchCars(true)
       setToast({ type: 'success', message: editing ? 'แก้ไขรถเรียบร้อย' : 'เพิ่มรถใหม่เรียบร้อย' })
     } catch {
       setError('เกิดข้อผิดพลาด')
@@ -77,7 +79,8 @@ export default function CarsManage() {
     try {
       const res = await fetch(`/api/admin/cars/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (res.ok) {
-        await fetchCars()
+        invalidateApi()
+        await fetchCars(true)
         setToast({ type: 'success', message: 'ลบรถเรียบร้อย' })
       } else {
         const data = await res.json()
@@ -88,12 +91,11 @@ export default function CarsManage() {
     }
   }
 
-  async function fetchCars() {
+  async function fetchCars(force = false) {
     try {
-      const res = await fetch('/api/admin/cars', { headers: authHeaders() })
+      const res = await apiGet('/api/admin/cars', { headers: authHeaders(), force })
       if (res.ok) {
-        const data = await res.json()
-        setCars(data.cars)
+        setCars(res.data.cars)
       }
     } catch (e) {
       console.error(e)

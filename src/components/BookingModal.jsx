@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { todayStr } from '../lib/constants'
+import { apiGet, invalidateApi } from '../lib/apiCache'
 import RangeDatePicker from './RangeDatePicker'
 
 function CarSelect({ value, onChange, options }) {
@@ -175,10 +176,9 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
 
   async function fetchCars() {
     try {
-      const res = await fetch('/api/cars?status=available', { headers: authHeaders() })
+      const res = await apiGet('/api/cars?status=available', { headers: authHeaders(), ttl: 15000 })
       if (res.ok) {
-        const data = await res.json()
-        setAvailableCars(data.cars)
+        setAvailableCars(res.data.cars)
       }
     } catch (e) {
       console.error(e)
@@ -187,10 +187,9 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
 
   async function fetchUsers() {
     try {
-      const res = await fetch('/api/admin/users', { headers: authHeaders() })
+      const res = await apiGet('/api/admin/users', { headers: authHeaders(), ttl: 15000 })
       if (res.ok) {
-        const data = await res.json()
-        setUsers(data.users)
+        setUsers(res.data.users)
       }
     } catch (e) {
       console.error(e)
@@ -233,6 +232,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
       }
 
       setSuccess('ส่งคำขอยืมเรียบร้อย รอการอนุมัติจากผู้ดูแลระบบ')
+      invalidateApi()
       setTimeout(() => {
         onClose()
       }, 1500)

@@ -46,7 +46,12 @@ async function resolveTokenUser(decoded) {
   await initDB()
   const id = toId(decoded && decoded.id)
   if (!id) return null
-  const dbUser = await findOne(collections.users, { _id: id })
+  // Project to the handful of fields the caller needs — this runs on every
+  // authenticated request, so shipping password hashes and id cards around is
+  // pure waste.
+  const dbUser = await findOne(collections.users, { _id: id }, {
+    projection: { email: 1, role: 1, name: 1, token_version: 1 },
+  })
   if (!dbUser) return null
   if ((dbUser.token_version || 0) !== (decoded.tv || 0)) return null
   return { id: str(dbUser._id), email: dbUser.email, role: dbUser.role, name: dbUser.name, token_version: dbUser.token_version || 0 }

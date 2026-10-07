@@ -1,5 +1,6 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useApp } from '../../context/AppContext'
+import { apiGet, invalidateApi } from '../../lib/apiCache'
 import { statusLabel, badgeClass } from '../../lib/constants'
 import { Spinner } from '../../components/ui/spinner'
 import { EmptyState } from '../../components/ui/empty-state'
@@ -28,8 +29,14 @@ export default function BookingsManage() {
   const [viewTab, setViewTab] = useState('list')
   const [toast, setToast] = useState(null)
 
+  const prevRefreshRef = useRef(0)
+
   useEffect(() => {
-    fetchBookings()
+    // Reuse a fresh cache entry on mount / page change; a realtime event must
+    // always hit the network.
+    const force = prevRefreshRef.current !== refreshSignal
+    prevRefreshRef.current = refreshSignal
+    fetchBookings(force)
   }, [refreshSignal, page, filter])
 
   // Totals come from the server — the client only holds the current page.
@@ -38,13 +45,13 @@ export default function BookingsManage() {
   const returnedCount = counts.returned
   const filteredBookings = bookings
 
-  async function fetchBookings() {
+  async function fetchBookings(force = false) {
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
       if (filter !== 'all') params.set('status', filter)
-      const res = await fetch(`/api/admin/bookings?${params}`, { headers: authHeaders() })
+      const res = await apiGet(`/api/admin/bookings?${params}`, { headers: authHeaders(), force })
       if (res.ok) {
-        const data = await res.json()
+        const data = res.data
         const rows = data.bookings || []
         setBookings(rows)
         if (data.counts) setCounts(data.counts)
@@ -60,7 +67,7 @@ export default function BookingsManage() {
   async function approveBooking(id) {
     try {
       const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'อนุมัติคำขอยืมเรียบร้อย' }) }
+      if (res.ok) { invalidateApi(); await fetchBookings(true); fetchNotificationCount(); setToast({ type: 'success', message: 'อนุมัติคำขอยืมเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 
@@ -77,7 +84,7 @@ export default function BookingsManage() {
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_notes: rejectReason })
       })
-      if (res.ok) { setShowRejectModal(false); await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'ปฏิเสธคำขอยืมเรียบร้อย' }) }
+      if (res.ok) { setShowRejectModal(false); invalidateApi(); await fetchBookings(true); fetchNotificationCount(); setToast({ type: 'success', message: 'ปฏิเสธคำขอยืมเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 
@@ -85,7 +92,7 @@ export default function BookingsManage() {
     if (!confirm('ยืนยันการคืนรถ?')) return
     try {
       const res = await fetch(`/api/admin/bookings/${id}/return`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'คืนรถเรียบร้อย' }) }
+      if (res.ok) { invalidateApi(); await fetchBookings(true); fetchNotificationCount(); setToast({ type: 'success', message: 'คืนรถเรียบร้อย' }) }
     } catch (e) { console.error(e) }
   }
 

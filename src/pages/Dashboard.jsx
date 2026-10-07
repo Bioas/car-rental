@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { apiGet, invalidateApi } from '../lib/apiCache'
 import { StatCard } from '../components/StatCard'
 import { statusLabel, badgeClass } from '../lib/constants'
 import { SkeletonStats, SkeletonPanel } from '../components/ui/skeleton'
@@ -68,23 +69,31 @@ export default function Dashboard() {
   const [maxCarCount, setMaxCarCount] = useState(1)
   const [leavingBookings, setLeavingBookings] = useState([])
 
+  const prevRefreshRef = useRef(0)
+
   useEffect(() => {
-    fetchData()
+    // The first run may reuse a still-fresh cache entry; a realtime event
+    // means the data actually changed, so that one must hit the network.
+    const force = prevRefreshRef.current !== refreshSignal
+    prevRefreshRef.current = refreshSignal
+    fetchData(force)
   }, [refreshSignal])
 
-  async function fetchData() {
+  async function fetchData(force = false) {
     try {
       const headers = authHeaders()
-      const [carsRes, bookingsRes] = await Promise.all([
-        fetch('/api/cars', { headers }),
-        isAdmin ? fetch('/api/admin/bookings', { headers }) : fetch('/api/admin/bookings', { headers }),
-      ])
+      // Everything the dashboard needs is independent — one round trip instead
+      // of three. Non-admins never see admin data, so those requests are
+      // skipped entirely instead of firing and getting a 403.
+      const requests = [apiGet('/api/cars', { headers, force })]
+      if (isAdmin) {
+        requests.push(apiGet('/api/admin/bookings?status=pending&page=1&limit=6', { headers, force }))
+        requests.push(apiGet('/api/admin/reports', { headers, force }))
+      }
+      const [carsRes, pendingRes, reportsRes] = await Promise.all(requests)
 
-      const today = new Date().toISOString().split('T')[0]
-      if (bookingsRes.ok) {
-        const bookingData = await bookingsRes.json()
-        const all = bookingData.bookings || []
-        const newList = all.filter(b => b.status === 'pending').slice(0, 6)
+      if (pendingRes?.ok) {
+        const newList = (pendingRes.data.bookings || []).slice(0, 6)
         setPendingList(prev => {
           const leaving = prev.filter(b => !newList.some(n => n.id === b.id))
           if (leaving.length > 0) {
@@ -93,11 +102,10 @@ export default function Dashboard() {
           }
           return newList
         })
-        setActiveBookings(all.filter(b => b.status === 'approved' && b.start_date <= today && b.end_date >= today).length)
       }
 
       if (carsRes.ok) {
-        const carsData = await carsRes.json()
+        const carsData = carsRes.data
         setAvailableCarsList(carsData.cars
           .filter(c => c.status === 'available' && !c.has_active_booking)
           .slice(0, 6)
@@ -105,18 +113,15 @@ export default function Dashboard() {
         setStats(prev => ({ ...prev, totalCars: carsData.cars.length, availableCars: carsData.cars.filter(c => c.status === 'available').length }))
       }
 
-      if (isAdmin) {
-        const adminRes = await fetch('/api/admin/reports', { headers })
-        if (adminRes.ok) {
-          const reportData = await adminRes.json()
-          setStats(prev => ({ ...prev, pendingBookings: reportData.stats?.pendingBookings || 0 }))
-          setBookingsByCar(reportData.bookingsByCar || [])
-          setBookingsByMonth(reportData.bookingsByMonth || [])
-          setTopUsers(reportData.topUsers || [])
-          if (reportData.bookingsByCar?.length > 0) {
-            setMaxCarCount(Math.max(...reportData.bookingsByCar.map(c => c.count), 1))
-          }
-
+      if (isAdmin && reportsRes.ok) {
+        const reportData = reportsRes.data
+        setStats(prev => ({ ...prev, pendingBookings: reportData.stats?.pendingBookings || 0 }))
+        setActiveBookings(reportData.stats?.activeToday || 0)
+        setBookingsByCar(reportData.bookingsByCar || [])
+        setBookingsByMonth(reportData.bookingsByMonth || [])
+        setTopUsers(reportData.topUsers || [])
+        if (reportData.bookingsByCar?.length > 0) {
+          setMaxCarCount(Math.max(...reportData.bookingsByCar.map(c => c.count), 1))
         }
       }
     } catch (e) {
@@ -129,7 +134,7 @@ export default function Dashboard() {
   async function approveBooking(id) {
     try {
       const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { fetchData(); fetchNotificationCount() }
+      if (res.ok) { invalidateApi(); fetchData(true); fetchNotificationCount() }
     } catch (e) { console.error(e) }
   }
 
@@ -140,7 +145,7 @@ export default function Dashboard() {
         headers: { ...authHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_notes: '' })
       })
-      if (res.ok) { fetchData(); fetchNotificationCount() }
+      if (res.ok) { invalidateApi(); fetchData(true); fetchNotificationCount() }
     } catch (e) { console.error(e) }
   }
 

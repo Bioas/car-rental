@@ -166,11 +166,24 @@ async function initDB() {
 
 async function doInitDB() {
   const db = await connect()
-  await db.collection('users').createIndex({ email: 1 }, { unique: true })
-  await db.collection('cars').createIndex({ license_plate: 1 }, { unique: true })
-  await db.collection('bookings').createIndex({ car_id: 1, status: 1, start_date: 1, end_date: 1 })
-  await db.collection('bookings').createIndex({ user_id: 1, created_at: -1 })
-  await db.collection('notifications').createIndex({ user_id: 1, created_at: -1 })
+  // createIndex is idempotent, and every index below matches a query shape the
+  // routes actually issue (list sorts, status filters, availability clash
+  // scans). They are created in parallel — a cold start pays one round trip
+  // instead of one per index.
+  await Promise.all([
+    db.collection('users').createIndex({ email: 1 }, { unique: true }),
+    db.collection('users').createIndex({ created_at: -1 }),
+    db.collection('users').createIndex({ role: 1, name: 1 }),
+    db.collection('cars').createIndex({ license_plate: 1 }, { unique: true }),
+    db.collection('cars').createIndex({ status: 1, brand: 1, model: 1 }),
+    db.collection('bookings').createIndex({ car_id: 1, status: 1, start_date: 1, end_date: 1 }),
+    db.collection('bookings').createIndex({ user_id: 1, created_at: -1 }),
+    db.collection('bookings').createIndex({ status: 1, created_at: -1 }),
+    db.collection('bookings').createIndex({ created_at: -1 }),
+    db.collection('bookings').createIndex({ status: 1, start_date: 1, end_date: 1 }),
+    db.collection('notifications').createIndex({ user_id: 1, created_at: -1 }),
+    db.collection('notifications').createIndex({ user_id: 1, is_read: 1 }),
+  ])
 
   const userCount = await db.collection('users').countDocuments()
   if (userCount === 0) await seedInitialData(db)

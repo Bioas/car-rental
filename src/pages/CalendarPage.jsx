@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
+import { apiGet, invalidateApi } from '../lib/apiCache'
 import { STATUS_COLORS, statusLabel, todayStr } from '../lib/constants'
 import { BookingModal } from '../components/BookingModal'
 import BookingDetailModal from '../components/BookingDetailModal'
@@ -126,22 +127,20 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     ? cars.filter(c => carBookingBars[c.id] || c.status === 'available')
     : []
 
-  async function fetchData() {
+  async function fetchData(force = false) {
     try {
       const carsUrl = publicMode ? '/api/public/cars' : '/api/cars'
       const calendarUrl = publicMode ? '/api/public/calendar' : '/api/bookings/calendar'
       const headers = publicMode ? {} : authHeaders()
       const [carsRes, bookingsRes] = await Promise.all([
-        fetch(carsUrl, { headers }),
-        fetch(calendarUrl, { headers }),
+        apiGet(carsUrl, { headers, force }),
+        apiGet(calendarUrl, { headers, force }),
       ])
       if (carsRes.ok) {
-        const d = await carsRes.json()
-        setCars(d.cars)
+        setCars(carsRes.data.cars)
       }
       if (bookingsRes.ok) {
-        const d = await bookingsRes.json()
-        setRawBookings(d.bookings)
+        setRawBookings(bookingsRes.data.bookings)
       }
     } catch (e) {
       console.error(e)
@@ -270,7 +269,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       setToast({ type: 'error', submessage: d.error || 'อนุมัติไม่สำเร็จ' })
       return
     }
-    fetchData()
+    invalidateApi()
+    fetchData(true)
     fetchNotificationCount()
     setDetailBooking(null)
   }
@@ -287,7 +287,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       setToast({ type: 'error', submessage: d.error || 'ปฏิเสธไม่สำเร็จ' })
       return
     }
-    fetchData()
+    invalidateApi()
+    fetchData(true)
     fetchNotificationCount()
     setDetailBooking(null)
   }
@@ -299,7 +300,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       setToast({ type: 'error', submessage: d.error || 'คืนรถไม่สำเร็จ' })
       return
     }
-    fetchData()
+    invalidateApi()
+    fetchData(true)
     fetchNotificationCount()
     setDetailBooking(null)
   }
@@ -587,7 +589,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         publicMode={!!publicMode}
         canManageBookings={canManageBookings}
         onClose={() => setDetailBooking(null)}
-        onActionDone={fetchData}
+                onActionDone={() => { invalidateApi(); fetchData(true) }}
         setToast={setToast}
         onAdminApprove={(id) => adminApprove(id)}
         onOpenRejectModal={() => setRejectModal({ open: true, reason: '' })}

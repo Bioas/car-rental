@@ -4,6 +4,7 @@ require('./lib/load-env.cjs').loadEnv()
 
 const express = require('express')
 const cors = require('cors')
+const compression = require('compression')
 const path = require('path')
 const authRoutes = require('./routes/auth.cjs')
 const carRoutes = require('./routes/cars.cjs')
@@ -25,6 +26,37 @@ const SSE_KEEPALIVE_MS = Number(process.env.SSE_KEEPALIVE_MS || 30000)
 app.use(cors())
 app.use(express.json())
 
+// Gzip/deflate JSON and static assets — the vendor bundle and every API
+// payload are several times smaller on the wire. The SSE stream is excluded:
+// compressing a long-lived event stream buffers chunks and delays events.
+app.use(compression({
+  filter(req, res) {
+    if (req.url.startsWith('/api/events')) return false
+    const type = res.getHeader('Content-Type')
+    if (typeof type === 'string' && type.startsWith('text/event-stream')) return false
+    return compression.filter(req, res)
+  },
+}))
+
+const DIST_DIR = path.join(__dirname, '..', 'dist')
+
+// Static assets are served before the database middleware: they do not need a
+// connection, and a database outage must not take the app shell down.
+// Vite fingerprints everything under /assets, so those files are cacheable
+// forever; index.html must always be revalidated or browsers keep an old asset
+// graph after a deploy.
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(DIST_DIR, {
+    setHeaders(res, filePath) {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      } else {
+        res.setHeader('Cache-Control', 'no-cache')
+      }
+    },
+  }))
+}
+
 // Lazy DB init middleware — works with Vercel's serverless module.exports pattern
 // initDB() is idempotent (see db.cjs), so this is safe to call on every request
 // without re-reading the database file.
@@ -37,10 +69,6 @@ app.use(async (req, res, next) => {
     return res.status(500).json({ error: 'DB init failed', detail: err && err.message })
   }
 })
-
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '..', 'dist')))
-}
 
 app.use('/api/auth', authRoutes)
 app.use('/api/cars', carRoutes)
@@ -114,7 +142,8 @@ app.get('/api/health', (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res) => {
     if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'))
+      res.setHeader('Cache-Control', 'no-cache')
+      res.sendFile(path.join(DIST_DIR, 'index.html'))
     } else {
       res.status(404).json({ error: 'API route not found' })
     }

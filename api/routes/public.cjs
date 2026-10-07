@@ -1,6 +1,6 @@
 const { Router } = require('express')
 const {
-  collections, find, findOne, insertOne, updateOne, updateMany,
+  collections, find, findOne, insertOne, insertMany, updateOne, updateMany,
   deleteOne, toId, str, withLock,
 } = require('../db.cjs')
 const { broadcastToRole } = require('../sse.cjs')
@@ -50,21 +50,25 @@ router.get('/cars', async (req, res) => {
       return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' })
     }
 
-    let cars = await find(collections.cars, { status: 'available' }, { sort: { brand: 1, model: 1 } })
+    // One projected scan of the booking rows serves both the date-range clash
+    // filter and the active/upcoming counters — previously these were two
+    // separate full queries run one after the other.
+    const [cars, bookings] = await Promise.all([
+      find(collections.cars, { status: 'available' }, { sort: { brand: 1, model: 1 } }),
+      find(collections.bookings, { status: { $in: ['approved', 'pending'] } }, {
+        projection: { car_id: 1, start_date: 1, end_date: 1 },
+      }),
+    ])
 
+    let visibleCars = cars
     if (start_date && end_date) {
-      const clashing = await find(collections.bookings, {
-        status: { $in: ['approved', 'pending'] },
-        start_date: { $lte: end_date },
-        end_date: { $gte: start_date },
-      }, { projection: { car_id: 1 } })
-      const busy = new Set(clashing.map((b) => str(b.car_id)))
-      cars = cars.filter((c) => !busy.has(str(c._id)))
+      const busy = new Set(
+        bookings
+          .filter((b) => b.start_date <= end_date && b.end_date >= start_date)
+          .map((b) => str(b.car_id))
+      )
+      visibleCars = cars.filter((c) => !busy.has(str(c._id)))
     }
-
-    const bookings = await find(collections.bookings, {
-      status: { $in: ['approved', 'pending'] },
-    }, { projection: { car_id: 1, start_date: 1, end_date: 1 } })
 
     const activeCount = new Map()
     const upcomingCount = new Map()
@@ -78,7 +82,7 @@ router.get('/cars', async (req, res) => {
     }
 
     res.json({
-      cars: cars.map((c) => serializePublicCar(
+      cars: visibleCars.map((c) => serializePublicCar(
         c,
         activeCount.get(str(c._id)) || 0,
         upcomingCount.get(str(c._id)) || 0
@@ -237,13 +241,14 @@ router.post('/bookings/:id/return', async (req, res) => {
     )
 
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
-    for (const a of admins) {
-      await insertOne(collections.notifications, {
+    if (admins.length) {
+      const message = `🔁 ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) คืนรถเรียบร้อยแล้ว`
+      await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
-        message: `🔁 ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) คืนรถเรียบร้อยแล้ว`,
+        message,
         type: 'returned', related_type: 'booking', related_id: booking._id,
         is_read: false, created_at: new Date(),
-      })
+      })))
     }
 
     broadcastToRole('admin', 'data-changed', { action: 'public-return', booking_id: str(booking._id) })
@@ -294,13 +299,14 @@ router.post('/bookings/:id/cancel', async (req, res) => {
     )
 
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
-    for (const a of admins) {
-      await insertOne(collections.notifications, {
+    if (admins.length) {
+      const message = `❌ ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) ถูกยกเลิกโดยผู้ยืม`
+      await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
-        message: `❌ ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) ถูกยกเลิกโดยผู้ยืม`,
+        message,
         type: 'cancelled', related_type: 'booking', related_id: booking._id,
         is_read: false, created_at: new Date(),
-      })
+      })))
     }
 
     broadcastToRole('admin', 'data-changed', { action: 'cancel', booking_id: str(booking._id) })
@@ -386,9 +392,9 @@ router.post('/bookings', async (req, res) => {
 
     const { car, borrower, bookingId } = result
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
-    const notifMsg = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
-    for (const a of admins) {
-      await insertOne(collections.notifications, {
+    if (admins.length) {
+      const notifMsg = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
+      await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
         message: notifMsg,
         type: 'booking_request',
@@ -396,7 +402,7 @@ router.post('/bookings', async (req, res) => {
         related_id: bookingId,
         is_read: false,
         created_at: new Date(),
-      })
+      })))
     }
 
     broadcastToRole('admin', 'data-changed', {

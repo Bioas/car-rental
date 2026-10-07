@@ -3,6 +3,7 @@ import { Skeleton } from '../components/ui/skeleton'
 import BookingDetailModal from '../components/BookingDetailModal'
 import { Toast } from '../components/ui/toast'
 import RangeDatePicker, { useIsMobile } from '../components/RangeDatePicker'
+import { apiGet } from '../lib/apiCache'
 
 const CalendarPage = React.lazy(() => import('./CalendarPage'))
 
@@ -275,23 +276,21 @@ export default function PublicBooking() {
 
   async function fetchUsers() {
     try {
-      const res = await fetch('/api/public/users')
+      const res = await apiGet('/api/public/users', { ttl: 60000 })
       if (res.ok) {
-        const d = await res.json()
-        setUsers(d.users)
+        setUsers(res.data.users)
       }
     } catch (e) { console.error(e) }
   }
 
-  async function fetchCars(startDate, endDate) {
+  async function fetchCars(startDate, endDate, force = false) {
     setCarsLoading(true)
     try {
       let url = '/api/public/cars'
       if (startDate && endDate) url += `?start_date=${startDate}&end_date=${endDate}`
-      const res = await fetch(url)
+      const res = await apiGet(url, { ttl: 10000, force })
       if (res.ok) {
-        const d = await res.json()
-        setAvailableCars(d.cars)
+        setAvailableCars(res.data.cars)
       }
     } catch (e) { console.error(e) }
     finally { setCarsLoading(false) }
@@ -333,7 +332,7 @@ export default function PublicBooking() {
       // date range). Keep the date selection and let the user pick another
       // car for the same dates.
       if (form.start_date && form.end_date) {
-        await fetchCars(form.start_date, form.end_date)
+        await fetchCars(form.start_date, form.end_date, true)
         // Also bump the calendar refresh key so the calendar tab (when
         // the user switches to it) re-fetches with the latest booking list.
         setCalendarRefreshKey(k => k + 1)

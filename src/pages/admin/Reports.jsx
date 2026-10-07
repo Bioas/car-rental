@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { apiGet } from '../../lib/apiCache'
 import { StatCard } from '../../components/StatCard'
 import { Skeleton, SkeletonStats, SkeletonPanel } from '../../components/ui/skeleton'
 
@@ -26,12 +27,12 @@ export default function Reports() {
 
   async function fetchReports() {
     try {
-      const res = await fetch('/api/admin/reports', { headers: authHeaders() })
+      const res = await apiGet('/api/admin/reports', { headers: authHeaders() })
       if (res.ok) {
-        const data = await res.json()
-        setStats(data.stats)
-        setBookingsByCar(data.bookingsByCar)
-        setTopUsers(data.topUsers)
+        const data = res.data
+        setStats(data.stats || { totalCars: 0, totalBookings: 0, approvedBookings: 0, returnedBookings: 0 })
+        setBookingsByCar(data.bookingsByCar || [])
+        setTopUsers(data.topUsers || [])
         if (data.bookingsByCar?.length > 0) {
           setMaxCount(Math.max(...data.bookingsByCar.map(c => c.count), 1))
         }
