@@ -56,9 +56,6 @@ export default function Login() {
               </button>
             </form>
 
-            <div className="mt-6 p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-border-light dark:border-border-dark">              <p className="text-center text-gray-900 dark:text-white font-heading font-bold text-2xl">เข้าสู่ระบบ</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">ระบบบริหารจัดการยานพาหนะ</p>
-            </div>
           </div>
         </div>
       </div>
