@@ -5,6 +5,7 @@ import { Spinner } from '../../components/ui/spinner'
 import { EmptyState } from '../../components/ui/empty-state'
 import { Toast } from '../../components/ui/toast'
 import { Pager } from '../../components/ui/pager'
+import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
 
@@ -15,6 +16,7 @@ const PAGE_SIZE = 20
 export default function BookingsManage() {
   const { authHeaders, fetchNotificationCount, refreshSignal } = useApp()
   const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
@@ -52,6 +54,7 @@ export default function BookingsManage() {
         if (rows.length === 0 && page > 1) setPage(p => Math.max(p - 1, 1))
       }
     } catch (e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
   async function approveBooking(id) {
@@ -84,6 +87,15 @@ export default function BookingsManage() {
       const res = await fetch(`/api/admin/bookings/${id}/return`, { method: 'PUT', headers: authHeaders() })
       if (res.ok) { await fetchBookings(); fetchNotificationCount(); setToast({ type: 'success', message: 'คืนรถเรียบร้อย' }) }
     } catch (e) { console.error(e) }
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0">
+        <SkeletonHeader />
+        <SkeletonTable rows={6} />
+      </div>
+    )
   }
 
   return (

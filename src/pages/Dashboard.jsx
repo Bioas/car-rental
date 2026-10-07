@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { StatCard } from '../components/StatCard'
 import { statusLabel, badgeClass } from '../lib/constants'
+import { SkeletonStats, SkeletonPanel } from '../components/ui/skeleton'
 
 function ScrollFade({ maxHeight, className, children }) {
   const ref = useRef(null)
@@ -56,6 +57,7 @@ function ScrollFade({ maxHeight, className, children }) {
 
 export default function Dashboard() {
   const { isAdmin, authHeaders, fetchNotificationCount, refreshSignal } = useApp()
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ totalCars: 0, availableCars: 0, pendingBookings: 0 })
   const [pendingList, setPendingList] = useState([])
   const [availableCarsList, setAvailableCarsList] = useState([])
@@ -119,6 +121,8 @@ export default function Dashboard() {
       }
     } catch (e) {
       console.error('Dashboard fetch error:', e)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -141,6 +145,19 @@ export default function Dashboard() {
   }
 
   function pctCount(count) { return maxCarCount > 0 ? (count / maxCarCount) * 100 : 0 }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0 space-y-6">
+        <SkeletonStats count={isAdmin ? 4 : 3} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <SkeletonPanel lines={3} />
+          <SkeletonPanel lines={4} />
+        </div>
+        {isAdmin && <SkeletonPanel lines={3} />}
+      </div>
+    )
+  }
 
   return (
     <div className="animate-fade-in flex flex-col flex-1 min-h-0 space-y-6">

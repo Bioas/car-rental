@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Skeleton } from '../components/ui/skeleton'
 import BookingDetailModal from '../components/BookingDetailModal'
 import { Toast } from '../components/ui/toast'
 import RangeDatePicker, { useIsMobile } from '../components/RangeDatePicker'
@@ -200,6 +201,7 @@ function CarSelect({ value, onChange, options }) {
 
 export default function PublicBooking() {
   const [availableCars, setAvailableCars] = useState([])
+  const [carsLoading, setCarsLoading] = useState(false)
   const [users, setUsers] = useState([])
   const [form, setForm] = useState({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '' })
   const [loading, setLoading] = useState(false)
@@ -279,6 +281,7 @@ export default function PublicBooking() {
   }
 
   async function fetchCars(startDate, endDate) {
+    setCarsLoading(true)
     try {
       let url = '/api/public/cars'
       if (startDate && endDate) url += `?start_date=${startDate}&end_date=${endDate}`
@@ -288,6 +291,7 @@ export default function PublicBooking() {
         setAvailableCars(d.cars)
       }
     } catch (e) { console.error(e) }
+    finally { setCarsLoading(false) }
   }
 
   function updateForm(key, value) {
@@ -446,6 +450,26 @@ export default function PublicBooking() {
                     <p className="text-gray-400 dark:text-gray-500 text-base">กรุณาเลือกวันที่ต้องการใช้งาน</p>
                     <p className="text-gray-300 dark:text-gray-600 text-sm mt-1">เลือกวันที่เริ่มต้นและสิ้นสุดเพื่อดูรายการรถที่ว่าง</p>
                   </div>
+                ) : carsLoading ? (
+                  <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div key={i} className="rounded-2xl border-2 border-gray-100 dark:border-gray-700 p-5">
+                          <div className="flex items-center gap-4 mb-3">
+                            <Skeleton className="w-12 h-12 rounded-xl shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-3 w-16 mt-2" />
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Skeleton className="h-5 w-16 rounded-md" />
+                            <Skeleton className="h-5 w-14 rounded-md" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ) : availableCars.length === 0 ? (
                   <div className="text-center py-12 text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-6">ไม่พบรถที่ว่างในวันที่เลือก</div>
                 ) : (
@@ -489,7 +513,21 @@ export default function PublicBooking() {
               <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">ปฏิทินจองยานพาหนะ</h2>
               <p className="text-gray-500 dark:text-gray-400 mt-1">ดูภาพรวมการจองยานพาหนะ</p>
             </div>
-            <React.Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400"><i className="bx bx-loader-alt text-2xl animate-spin"></i></div>}>
+            <React.Suspense fallback={
+              <div className="card p-4">
+                <div className="grid grid-cols-7 gap-2 mb-4">
+                  {Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-4" />)}
+                </div>
+                <div className="space-y-3">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Skeleton className="h-10 w-28 rounded-lg shrink-0" />
+                      <Skeleton className="h-10 flex-1 rounded-lg" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            }>
               <CalendarPage publicMode onDateClick={(dateStr) => { updateForm('start_date', dateStr); setShowBookingModal(true) }} refreshKey={calendarRefreshKey} />
             </React.Suspense>
           </section>

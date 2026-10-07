@@ -5,6 +5,7 @@ import { BookingModal } from '../components/BookingModal'
 import BookingDetailModal from '../components/BookingDetailModal'
 import { Toast } from '../components/ui/toast'
 import { CalendarMonthGrid } from '../components/CalendarMonthGrid'
+import { Skeleton } from '../components/ui/skeleton'
 import '../styles/calendar-overrides.css'
 
 const THAI_MONTHS = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
@@ -28,6 +29,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const canManageBookings = isAdmin && !publicMode
   const [rawBookings, setRawBookings] = useState([])
   const [cars, setCars] = useState([])
+  const [loading, setLoading] = useState(true)
   const [bookingOpen, setBookingOpen] = useState(false)
   const [bookingDate, setBookingDate] = useState('')
   const [bookingCarId, setBookingCarId] = useState(null)
@@ -143,6 +145,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       }
     } catch (e) {
       console.error(e)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -295,6 +299,30 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     fetchData()
     fetchNotificationCount()
     setDetailBooking(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col h-full">
+        <div className="mb-6">
+          <Skeleton className="h-7 w-40 rounded-lg" />
+          <Skeleton className="h-4 w-56 mt-2.5" />
+        </div>
+        <div className="card p-4 flex-1">
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {Array.from({ length: 7 }, (_, i) => <Skeleton key={i} className="h-4" />)}
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-10 w-32 rounded-lg shrink-0" />
+                <Skeleton className="h-10 flex-1 rounded-lg" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

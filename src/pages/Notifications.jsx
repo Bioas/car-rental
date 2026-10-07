@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { timeAgo } from '../lib/constants'
+import { Skeleton, SkeletonList } from '../components/ui/skeleton'
 
 const FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
@@ -25,21 +26,6 @@ function NotifIcon({ type }) {
   return (
     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${t.color}`}>
       <i className={`bx ${t.icon} text-xl`}></i>
-    </div>
-  )
-}
-
-function SkeletonItem() {
-  return (
-    <div className="rounded-2xl border border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark p-4 animate-pulse">
-      <div className="flex items-start gap-4">
-        <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex-shrink-0" />
-        <div className="flex-1 space-y-2">
-          <div className="h-3 w-16 bg-gray-100 dark:bg-gray-800 rounded" />
-          <div className="h-4 w-3/4 bg-gray-100 dark:bg-gray-800 rounded" />
-          <div className="h-3 w-20 bg-gray-100 dark:bg-gray-800 rounded" />
-        </div>
-      </div>
     </div>
   )
 }
@@ -171,12 +157,10 @@ export default function Notifications() {
     return (
       <div className="animate-fade-in flex flex-col flex-1 min-h-0 w-full">
         <div className="mb-6">
-          <div className="h-8 w-48 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse mb-2" />
-          <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+          <Skeleton className="h-8 w-48 rounded-lg mb-2" />
+          <Skeleton className="h-4 w-32" />
         </div>
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map(i => <SkeletonItem key={i} />)}
-        </div>
+        <SkeletonList rows={4} />
       </div>
     )
   }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { StatCard } from '../../components/StatCard'
-import { Spinner } from '../../components/ui/spinner'
+import { Skeleton, SkeletonStats, SkeletonPanel } from '../../components/ui/skeleton'
 
 export default function Reports() {
   const { authHeaders } = useApp()
@@ -44,7 +44,19 @@ export default function Reports() {
     }
   }
 
-  if (loading) return <Spinner />
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0">
+        <Skeleton className="h-7 w-40 rounded-lg mb-6" />
+        <SkeletonStats className="mb-6" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SkeletonPanel lines={6} />
+          <SkeletonPanel lines={5} />
+          <SkeletonPanel lines={3} className="lg:col-span-2" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="animate-fade-in flex flex-col flex-1 min-h-0">

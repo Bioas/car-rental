@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { Pager } from '../../components/ui/pager'
+import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
 const PAGE_SIZE = 20
 
 export default function UsersManage() {
   const { authHeaders } = useApp()
   const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -102,6 +104,16 @@ export default function UsersManage() {
         if (rows.length === 0 && page > 1) setPage(p => Math.max(p - 1, 1))
       }
     } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0">
+        <SkeletonHeader />
+        <SkeletonTable rows={6} />
+      </div>
+    )
   }
 
   return (

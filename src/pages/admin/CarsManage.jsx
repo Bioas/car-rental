@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { statusLabel, badgeClass } from '../../lib/constants'
 import { Toast } from '../../components/ui/toast'
+import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
 export default function CarsManage() {
   const { authHeaders } = useApp()
   const [cars, setCars] = useState([])
+  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -95,7 +97,18 @@ export default function CarsManage() {
       }
     } catch (e) {
       console.error(e)
+    } finally {
+      setLoading(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in flex flex-col flex-1 min-h-0">
+        <SkeletonHeader />
+        <SkeletonTable rows={6} />
+      </div>
+    )
   }
 
   return (
