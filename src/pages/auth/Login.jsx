@@ -31,7 +31,7 @@ export default function Login() {
         <div className="w-full max-w-md animate-slide-up">
           <div className="text-center mb-10">
             <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-5 shadow-xl shadow-brand-500/30">
-              <i className="bx bxs-zap text-3xl text-white"></i>
+              <i className="bx bx-car text-3xl text-white"></i>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-heading">เข้าสู่ระบบ</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">ระบบบริหารจัดการยานพาหนะ</p>

@@ -17,7 +17,7 @@ export function Sidebar() {
           <div className="relative w-9 h-9 flex-shrink-0">
             <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-lg shadow-brand-500/25" />
             <div className="relative w-full h-full flex items-center justify-center">
-              <i className="bx bxs-zap text-base text-white"></i>
+              <i className="bx bx-car text-base text-white"></i>
             </div>
           </div>
           <div className="min-w-0">

@@ -387,7 +387,7 @@ export default function PublicBooking() {
       <header className="relative z-10 flex items-center justify-center sm:justify-start px-6 lg:px-12 h-20">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
-            <i className="bx bxs-zap text-xl text-white"></i>
+            <i className="bx bx-car text-xl text-white"></i>
           </div>
           <span className="font-heading font-bold text-lg text-gray-900 dark:text-white">วิทยาลัยเทคนิคบุรีรัมย์</span>
         </div>
