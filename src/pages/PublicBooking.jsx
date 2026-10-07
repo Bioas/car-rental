@@ -328,7 +328,16 @@ export default function PublicBooking() {
       // range for another booking without re-picking. Only clear the
       // per-booking fields (user, car, purpose).
       setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '' }))
-      setCalendarRefreshKey(k => k + 1)
+      // Re-fetch cars so the just-booked car disappears from the grid
+      // (the API already filters out pending/approved bookings for this
+      // date range). Keep the date selection and let the user pick another
+      // car for the same dates.
+      if (form.start_date && form.end_date) {
+        await fetchCars(form.start_date, form.end_date)
+        // Also bump the calendar refresh key so the calendar tab (when
+        // the user switches to it) re-fetches with the latest booking list.
+        setCalendarRefreshKey(k => k + 1)
+      }
     } catch {
       setToast({ type: 'error', submessage: 'เกิดข้อผิดพลาด กรุณาลองใหม่' })
     } finally {
