@@ -9,7 +9,7 @@ export function Sidebar() {
     <aside
       className={`fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border-light dark:border-border-dark bg-card-light dark:bg-card-dark w-64 transition-transform duration-300 ease-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      } lg:translate-x-0 lg:relative lg:inset-auto lg:h-screen`}
+      } lg:translate-x-0 lg:sticky lg:top-0 lg:bottom-auto lg:left-auto lg:h-screen`}
     >
       {/* Logo Section */}
       <div className="flex items-center h-20 px-4 border-b border-border-light/80 dark:border-border-dark/80 justify-between">
