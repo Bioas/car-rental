@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Select } from './ui/select'
 
 /**
  * Approval dialog shown when an admin approves a pending booking.
@@ -99,15 +100,9 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
           {mode === 'driver' && (
             <div className="pt-1 animate-fade-in">
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">เลือกพนักงานขับรถ</label>
-              <div className="relative">
-                <i className="bx bx-user-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
-                <select value={driverId} onChange={e => { setDriverId(e.target.value); setError('') }}
-                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all appearance-none">
-                  <option value="">— เลือกพนักงานขับรถ —</option>
-                  {drivers.map(d => <option key={d.id} value={d.id}>{d.name}{d.phone ? ` (${d.phone})` : ''}</option>)}
-                </select>
-                <i className="bx bx-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400 pointer-events-none"></i>
-              </div>
+              <Select value={driverId} onChange={v => { setDriverId(v); setError('') }}
+                icon="bx-user-pin" placeholder="— เลือกพนักงานขับรถ —"
+                options={drivers.map(d => ({ value: d.id, label: d.phone ? `${d.name} (${d.phone})` : d.name }))} />
               {drivers.length === 0 && (
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                   <i className="bx bx-info-circle text-sm"></i>

@@ -4,6 +4,7 @@ import { apiGet, invalidateApi } from '../../lib/apiCache'
 import { statusLabel, badgeClass, CAR_TYPES } from '../../lib/constants'
 import { Toast } from '../../components/ui/toast'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
+import { Select } from '../../components/ui/select'
 
 export default function CarsManage() {
   const { authHeaders } = useApp()
@@ -323,15 +324,9 @@ export default function CarsManage() {
               {/* Type */}
               <div>
                 <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ประเภทรถ</label>
-                <div className="relative">
-                  <i className="bx bx-category absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
-                  <select value={form.type} onChange={e => updateForm('type', e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all appearance-none">
-                    <option value="">— เลือกประเภทรถ —</option>
-                    {CAR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <i className="bx bx-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400 pointer-events-none"></i>
-                </div>
+                <Select value={form.type} onChange={v => updateForm('type', v)}
+                  icon="bx-category" placeholder="— เลือกประเภทรถ —"
+                  options={CAR_TYPES.map(t => ({ value: t, label: t }))} />
               </div>
 
               {/* Color + Year + Seats */}
