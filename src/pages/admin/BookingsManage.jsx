@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/ui/empty-state'
 import { Toast } from '../../components/ui/toast'
 import { Pager } from '../../components/ui/pager'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
+import ApproveBookingModal from '../../components/ApproveBookingModal'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
 
@@ -26,6 +27,9 @@ export default function BookingsManage() {
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [drivers, setDrivers] = useState([])
+  const [approveSaving, setApproveSaving] = useState(false)
   const [viewTab, setViewTab] = useState('list')
   const [toast, setToast] = useState(null)
 
@@ -64,11 +68,38 @@ export default function BookingsManage() {
     finally { setLoading(false) }
   }
 
-  async function approveBooking(id) {
+  // Approving first asks who drives; the driver list is fetched lazily.
+  async function openApprove(b) {
+    setApproveTarget(b)
+    if (drivers.length === 0) {
+      try {
+        const res = await apiGet('/api/admin/drivers', { headers: authHeaders(), ttl: 30000 })
+        if (res.ok) setDrivers(res.data.drivers || [])
+      } catch (e) { console.error(e) }
+    }
+  }
+
+  async function confirmApprove({ self_drive, driver_id }) {
+    if (!approveTarget) return
+    setApproveSaving(true)
     try {
-      const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
-      if (res.ok) { invalidateApi(); await fetchBookings(true); fetchNotificationCount(); setToast({ type: 'success', message: 'อนุมัติคำขอยืมเรียบร้อย' }) }
+      const res = await fetch(`/api/admin/bookings/${approveTarget.id}/approve`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ self_drive, driver_id }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setToast({ type: 'error', message: d.error || 'อนุมัติไม่สำเร็จ' })
+        return
+      }
+      setApproveTarget(null)
+      invalidateApi()
+      await fetchBookings(true)
+      fetchNotificationCount()
+      setToast({ type: 'success', message: 'อนุมัติคำขอยืมเรียบร้อย' })
     } catch (e) { console.error(e) }
+    finally { setApproveSaving(false) }
   }
 
   function showRejectForm(b) {
@@ -230,6 +261,24 @@ export default function BookingsManage() {
                     <span className="text-gray-600 dark:text-gray-400">{b.purpose}</span>
                   </div>
                 )}
+                {(b.destination_place || b.destination_district || b.destination_province) && (
+                  <div className="flex items-start gap-2 text-sm">
+                    <i className="bx bx-map text-base text-gray-400 shrink-0 mt-0.5"></i>
+                    <span className="text-gray-600 dark:text-gray-400">{[b.destination_place, b.destination_district, b.destination_province].filter(Boolean).join(' · ')}</span>
+                  </div>
+                )}
+                {b.attendees > 0 && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <i className="bx bx-group text-base text-gray-400 shrink-0"></i>
+                    <span className="text-gray-600 dark:text-gray-400">ผู้ไปราชการ {b.attendees} คน</span>
+                  </div>
+                )}
+                {b.status === 'approved' && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <i className="bx bx-car text-base text-gray-400 shrink-0"></i>
+                    <span className="text-gray-600 dark:text-gray-400">{b.driver_name ? `พนักงานขับรถ: ${b.driver_name}` : 'ผู้ยืมขับเอง'}</span>
+                  </div>
+                )}
                 {b.admin_notes && (
                   <div className="flex items-start gap-2 text-sm">
                     <i className="bx bx-message-detail text-base text-gray-400 shrink-0 mt-0.5"></i>
@@ -241,7 +290,7 @@ export default function BookingsManage() {
               {/* Actions */}
               {b.status === 'pending' && (
                 <div className="flex gap-2">
-                  <button onClick={() => approveBooking(b.id)} className="flex-1 h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-sm transition-all">
+                  <button onClick={() => openApprove(b)} className="flex-1 h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-sm transition-all">
                     <i className="bx bx-check text-lg"></i>
                     อนุมัติ
                   </button>
@@ -297,6 +346,11 @@ export default function BookingsManage() {
                   <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{b.brand} {b.model}</span>
                     <span className="text-xs text-gray-500 block">{b.license_plate}</span>
+                    {b.status === 'approved' && (
+                      <span className={`text-[10px] block mt-0.5 ${b.driver_name ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>
+                        {b.driver_name ? `ขับโดย: ${b.driver_name}` : 'ผู้ยืมขับเอง'}
+                      </span>
+                    )}
                   </td>
                   <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{b.start_date}</span>
@@ -304,6 +358,10 @@ export default function BookingsManage() {
                   </td>
                   <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-600 dark:text-gray-400">{b.purpose || '-'}</span>
+                    {(b.destination_place || b.destination_district || b.destination_province) && (
+                      <span className="text-[10px] text-gray-400 block">{[b.destination_place, b.destination_district, b.destination_province].filter(Boolean).join(' · ')}</span>
+                    )}
+                    {b.attendees > 0 && <span className="text-[10px] text-gray-400 block">ผู้ไปราชการ {b.attendees} คน</span>}
                   </td>
                   <td className="p-3 sm:p-4 text-center">
                     <span className={badgeClass(b.status)}>{statusLabel(b.status)}</span>
@@ -312,7 +370,7 @@ export default function BookingsManage() {
                   <td className="p-3 sm:p-4 text-center">
                     {b.status === 'pending' && (
                       <div className="flex gap-1 justify-center">
-                        <button onClick={() => approveBooking(b.id)} className="btn-success btn-sm">
+                        <button onClick={() => openApprove(b)} className="btn-success btn-sm">
                           <i className="bx bx-check text-base"></i>
                           อนุมัติ
                         </button>
@@ -340,6 +398,14 @@ export default function BookingsManage() {
       <Pager page={page} pages={pages} total={total} limit={PAGE_SIZE} onChange={setPage} />
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+      <ApproveBookingModal
+        booking={approveTarget}
+        drivers={drivers}
+        saving={approveSaving}
+        onClose={() => { if (!approveSaving) setApproveTarget(null) }}
+        onConfirm={confirmApprove}
+      />
 
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowRejectModal(false)}>

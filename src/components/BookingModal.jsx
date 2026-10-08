@@ -158,7 +158,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
   const { authHeaders } = useApp()
   const [availableCars, setAvailableCars] = useState([])
   const [users, setUsers] = useState([])
-  const [form, setForm] = useState({ user_id: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '' })
+  const [form, setForm] = useState({ user_id: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -166,7 +166,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
 
   useEffect(() => {
     if (open) {
-      setForm({ user_id: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '' })
+      setForm({ user_id: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
       setError('')
       setSuccess('')
       fetchCars()
@@ -288,6 +288,47 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
               endDate={form.end_date}
               onChange={(s, e) => { updateForm('start_date', s); updateForm('end_date', e) }}
               min={today} />
+          </div>
+
+          {/* Trip details — 2×2 grid so all four short fields share one width
+              and no field is left orphaned on its own half-empty row. */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div>
+              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่อสถานที่</label>
+              <div className="relative">
+                <i className="bx bx-map-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <input value={form.destination_place} onChange={e => updateForm('destination_place', e.target.value)}
+                  className="w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all"
+                  placeholder="ชื่อสถานที่" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่ออำเภอ</label>
+              <div className="relative">
+                <i className="bx bx-buildings absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <input value={form.destination_district} onChange={e => updateForm('destination_district', e.target.value)}
+                  className="w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all"
+                  placeholder="ชื่ออำเภอ" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่อจังหวัด</label>
+              <div className="relative">
+                <i className="bx bx-map absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <input value={form.destination_province} onChange={e => updateForm('destination_province', e.target.value)}
+                  className="w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all"
+                  placeholder="ชื่อจังหวัด" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">จำนวนผู้ไปราชการ</label>
+              <div className="relative">
+                <i className="bx bx-group absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <input value={form.attendees} onChange={e => updateForm('attendees', e.target.value)} type="number" min="1"
+                  className="w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all"
+                  placeholder="จำนวนคน" />
+              </div>
+            </div>
           </div>
 
           <div>

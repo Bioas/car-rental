@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { apiGet, invalidateApi } from '../../lib/apiCache'
-import { statusLabel, badgeClass } from '../../lib/constants'
+import { statusLabel, badgeClass, CAR_TYPES } from '../../lib/constants'
 import { Toast } from '../../components/ui/toast'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
@@ -14,7 +14,7 @@ export default function CarsManage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState(null)
-  const [form, setForm] = useState({ license_plate: '', brand: '', model: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
+  const [form, setForm] = useState({ license_plate: '', brand: '', model: '', type: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
 
@@ -35,7 +35,7 @@ export default function CarsManage() {
       setForm({ ...car, year: car.year || '' })
     } else {
       setEditing(null)
-      setForm({ license_plate: '', brand: '', model: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
+      setForm({ license_plate: '', brand: '', model: '', type: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
     }
     setShowModal(true)
   }
@@ -144,7 +144,13 @@ export default function CarsManage() {
               </div>
 
               {/* Details */}
-              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
+                {car.type && (
+                  <div className="flex items-center gap-1">
+                    <i className="bx bx-category text-sm"></i>
+                    {car.type}
+                  </div>
+                )}
                 {car.color && (
                   <div className="flex items-center gap-1">
                     <i className="bx bx-palette text-sm"></i>
@@ -197,6 +203,7 @@ export default function CarsManage() {
               <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ทะเบียน</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ยี่ห้อ/รุ่น</th>
+                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ประเภท</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สี</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ปี</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ที่นั่ง</th>
@@ -212,6 +219,11 @@ export default function CarsManage() {
                   </td>
                   <td className="p-3 sm:p-4 text-center">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{car.brand} {car.model}</span>
+                  </td>
+                  <td className="p-3 sm:p-4 text-center">
+                    {car.type
+                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">{car.type}</span>
+                      : <span className="text-sm text-gray-400">-</span>}
                   </td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{car.color || '-'}</td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{car.year || '-'}</td>
@@ -305,6 +317,20 @@ export default function CarsManage() {
                   <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">รุ่น *</label>
                   <input value={form.model} onChange={e => updateForm('model', e.target.value)}
                     className="w-full h-11 px-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" required placeholder="Camry" />
+                </div>
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ประเภทรถ</label>
+                <div className="relative">
+                  <i className="bx bx-category absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                  <select value={form.type} onChange={e => updateForm('type', e.target.value)}
+                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all appearance-none">
+                    <option value="">— เลือกประเภทรถ —</option>
+                    {CAR_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <i className="bx bx-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400 pointer-events-none"></i>
                 </div>
               </div>
 

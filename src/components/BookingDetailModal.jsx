@@ -204,6 +204,49 @@ export default function BookingDetailModal({
               </div>
             </div>
           )}
+
+          {/* Destination */}
+          {(booking.destination_place || booking.destination_district || booking.destination_province) && (
+            <div className="flex items-start gap-3 px-3.5 py-3 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
+              <div className="w-9 h-9 rounded-lg bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+                <i className="bx bx-map text-base"></i>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">สถานที่จะไป</div>
+                <div className="text-sm font-medium text-neutral-800 dark:text-white">
+                  {[booking.destination_place, booking.destination_district, booking.destination_province].filter(Boolean).join(' · ')}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Attendees */}
+          {booking.attendees > 0 && (
+            <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
+              <div className="w-9 h-9 rounded-lg bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0">
+                <i className="bx bx-group text-base"></i>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">จำนวนผู้ไปราชการ</div>
+                <div className="text-sm font-medium text-neutral-800 dark:text-white">{booking.attendees} คน</div>
+              </div>
+            </div>
+          )}
+
+          {/* Driver — only meaningful once approved */}
+          {booking.status === 'approved' && (
+            <div className="flex items-center gap-3 px-3.5 py-3 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
+              <div className="w-9 h-9 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
+                <i className="bx bx-car text-base"></i>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">ผู้ขับขี่</div>
+                <div className="text-sm font-medium text-neutral-800 dark:text-white truncate">
+                  {booking.driver_name ? `พนักงานขับรถ: ${booking.driver_name}` : 'ผู้ยืมขับเอง'}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Return ID card form */}

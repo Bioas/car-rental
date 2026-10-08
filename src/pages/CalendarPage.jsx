@@ -4,6 +4,7 @@ import { apiGet, invalidateApi } from '../lib/apiCache'
 import { STATUS_COLORS, statusLabel, todayStr } from '../lib/constants'
 import { BookingModal } from '../components/BookingModal'
 import BookingDetailModal from '../components/BookingDetailModal'
+import ApproveBookingModal from '../components/ApproveBookingModal'
 import { Toast } from '../components/ui/toast'
 import { CalendarMonthGrid } from '../components/CalendarMonthGrid'
 import { Skeleton } from '../components/ui/skeleton'
@@ -35,6 +36,9 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const [bookingDate, setBookingDate] = useState('')
   const [bookingCarId, setBookingCarId] = useState(null)
   const [detailBooking, setDetailBooking] = useState(null)
+  const [approveTarget, setApproveTarget] = useState(null)
+  const [drivers, setDrivers] = useState([])
+  const [approveSaving, setApproveSaving] = useState(false)
   const [rejectModal, setRejectModal] = useState({ open: false, reason: '' })
   const [toast, setToast] = useState(null)
   const [viewMode, setViewMode] = useState('week')
@@ -262,17 +266,45 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     return STATUS_COLORS[status] || '#6b7280'
   }
 
+  // Approving asks who drives. The detail modal closes and the choice modal
+  // opens on top; the driver list is fetched lazily.
   async function adminApprove(id) {
-    const res = await fetch(`/api/admin/bookings/${id}/approve`, { method: 'PUT', headers: authHeaders() })
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }))
-      setToast({ type: 'error', submessage: d.error || 'อนุมัติไม่สำเร็จ' })
-      return
-    }
-    invalidateApi()
-    fetchData(true)
-    fetchNotificationCount()
+    const target = detailBooking && detailBooking.id === id
+      ? detailBooking
+      : rawBookings.find(b => b.id === id)
     setDetailBooking(null)
+    setApproveTarget(target || null)
+    if (drivers.length === 0) {
+      try {
+        const res = await apiGet('/api/admin/drivers', { headers: authHeaders(), ttl: 30000 })
+        if (res.ok) setDrivers(res.data.drivers || [])
+      } catch {}
+    }
+  }
+
+  async function confirmApprove({ self_drive, driver_id }) {
+    if (!approveTarget) return
+    setApproveSaving(true)
+    try {
+      const res = await fetch(`/api/admin/bookings/${approveTarget.id}/approve`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ self_drive, driver_id }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: 'เกิดข้อผิดพลาด' }))
+        setToast({ type: 'error', submessage: d.error || 'อนุมัติไม่สำเร็จ' })
+        return
+      }
+      setApproveTarget(null)
+      invalidateApi()
+      fetchData(true)
+      fetchNotificationCount()
+    } catch {
+      setToast({ type: 'error', submessage: 'เกิดข้อผิดพลาด' })
+    } finally {
+      setApproveSaving(false)
+    }
   }
 
   async function adminReject() {
@@ -594,6 +626,14 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         onAdminApprove={(id) => adminApprove(id)}
         onOpenRejectModal={() => setRejectModal({ open: true, reason: '' })}
         onAdminReturn={(id) => adminReturn(id)}
+      />
+
+      <ApproveBookingModal
+        booking={approveTarget}
+        drivers={drivers}
+        saving={approveSaving}
+        onClose={() => { if (!approveSaving) setApproveTarget(null) }}
+        onConfirm={confirmApprove}
       />
 
       {toast && (

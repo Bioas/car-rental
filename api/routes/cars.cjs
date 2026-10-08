@@ -12,6 +12,7 @@ function serializeCar(car, hasActiveBooking) {
     license_plate: car.license_plate,
     brand: car.brand,
     model: car.model,
+    type: car.type || '',
     color: car.color,
     year: car.year,
     seats: car.seats,

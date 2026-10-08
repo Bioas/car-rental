@@ -14,6 +14,7 @@ function publicUser(u) {
     email: u.email,
     role: u.role,
     phone: u.phone || '',
+    position: u.position || '',
     id_card: u.id_card || '',
     avatar: u.avatar || '',
     created_at: u.created_at,
@@ -72,6 +73,10 @@ router.post('/login', async (req, res) => {
 
     const user = await findOne(collections.users, { email })
     if (!user) {
+      return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' })
+    }
+    // Drivers are assignment records, not sign-in accounts.
+    if (user.role === 'driver') {
       return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' })
     }
 

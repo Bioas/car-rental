@@ -19,6 +19,7 @@ function serializeCar(car) {
     license_plate: car.license_plate,
     brand: car.brand,
     model: car.model,
+    type: car.type || '',
     color: car.color,
     year: car.year,
     seats: car.seats,
@@ -36,6 +37,13 @@ function serializeBooking(b, extras = {}) {
     start_date: b.start_date,
     end_date: b.end_date,
     purpose: b.purpose || '',
+    destination_place: b.destination_place || '',
+    destination_district: b.destination_district || '',
+    destination_province: b.destination_province || '',
+    attendees: b.attendees || 0,
+    self_drive: !!b.self_drive,
+    driver_id: str(b.driver_id),
+    driver_name: b.driver_name || '',
     status: b.status,
     admin_notes: b.admin_notes || '',
     created_at: b.created_at,
@@ -51,6 +59,7 @@ function publicUser(u) {
     email: u.email,
     role: u.role,
     phone: u.phone || '',
+    position: u.position || '',
     id_card: u.id_card || '',
     avatar: u.avatar || '',
     created_at: u.created_at,
@@ -104,7 +113,7 @@ router.get('/cars', async (req, res) => {
 
 router.post('/cars', async (req, res) => {
   try {
-    const { license_plate, brand, model, color, year, seats, status, notes } = req.body
+    const { license_plate, brand, model, type, color, year, seats, status, notes } = req.body
     if (!license_plate || !brand || !model) {
       return res.status(400).json({ error: 'กรุณากรอกทะเบียนรถ ยี่ห้อ และรุ่น' })
     }
@@ -117,7 +126,7 @@ router.post('/cars', async (req, res) => {
     let id
     try {
       id = await insertOne(collections.cars, {
-        license_plate, brand, model, color: color || '', year: year || null,
+        license_plate, brand, model, type: type || '', color: color || '', year: year || null,
         seats: seats || 4, status: status || 'available', notes: notes || '', created_at: new Date(),
       })
     } catch (err) {
@@ -137,11 +146,12 @@ router.put('/cars/:id', async (req, res) => {
     const car = id ? await findOne(collections.cars, { _id: id }) : null
     if (!car) return res.status(404).json({ error: 'ไม่พบรถยนต์' })
 
-    const { license_plate, brand, model, color, year, seats, status, notes } = req.body
+    const { license_plate, brand, model, type, color, year, seats, status, notes } = req.body
     const data = {}
     if (license_plate) data.license_plate = license_plate
     if (brand) data.brand = brand
     if (model) data.model = model
+    if (type !== undefined) data.type = type
     if (color !== undefined) data.color = color
     if (year !== undefined) data.year = year
     if (seats !== undefined) data.seats = seats
@@ -208,31 +218,43 @@ router.get('/users', async (req, res) => {
   }
 })
 
+// Drivers are a separate role from borrowers; the approve flow needs the full
+// list (unpaged) so an admin can pick one without hunting through page 2.
+router.get('/drivers', async (req, res) => {
+  try {
+    const drivers = await find(collections.users, { role: 'driver' }, { sort: { name: 1 } })
+    res.json({ drivers: drivers.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
 router.post('/users', async (req, res) => {
   try {
-    let { name, email, password, phone, role, id_card } = req.body
+    let { name, email, password, phone, role, id_card, position } = req.body
     if (!name || !email) {
       return res.status(400).json({ error: 'กรุณากรอกชื่อและอีเมล' })
     }
-    if (role && !['admin', 'user'].includes(role)) {
+    const finalRole = role || 'user'
+    if (!['admin', 'user', 'driver'].includes(finalRole)) {
       return res.status(400).json({ error: 'role ไม่ถูกต้อง' })
     }
-    if (role === 'admin' && !password) {
+    // Only admins sign in; users and drivers are records that a booking is made
+    // for. A driver therefore never needs a password.
+    if (finalRole === 'admin' && !password) {
       return res.status(400).json({ error: 'กรุณากรอกรหัสผ่านสำหรับผู้ดูแล' })
     }
-    if (role === 'admin' && String(password).length < 6) {
+    if (finalRole === 'admin' && String(password).length < 6) {
       return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
     }
-    if (!role || role === 'user') {
-      if (!password) password = ''
-    }
+    if (!password) password = ''
     const existing = await findOne(collections.users, { email })
     if (existing) return res.status(409).json({ error: 'อีเมลนี้มีในระบบแล้ว' })
 
     const hashed = await bcrypt.hash(password, 10)
     const id = await insertOne(collections.users, {
-      name, email, password: hashed, phone: phone || '', id_card: id_card || '',
-      avatar: '', role: role || 'user', token_version: 0, created_at: new Date(),
+      name, email, password: hashed, phone: phone || '', position: position || '', id_card: id_card || '',
+      avatar: '', role: finalRole, token_version: 0, created_at: new Date(),
     })
     const user = await findOne(collections.users, { _id: id })
     res.status(201).json({ user: publicUser(user) })
@@ -247,10 +269,11 @@ router.put('/users/:id', async (req, res) => {
     const user = id ? await findOne(collections.users, { _id: id }) : null
     if (!user) return res.status(404).json({ error: 'ไม่พบผู้ใช้' })
 
-    const { name, email, password, phone, role, id_card } = req.body
+    const { name, email, password, phone, role, id_card, position } = req.body
     const data = {}
     let bumpToken = false
     if (name) data.name = name
+    if (position !== undefined) data.position = position
     if (email) {
       const dup = await findOne(collections.users, { email, _id: { $ne: user._id } })
       if (dup) return res.status(409).json({ error: 'อีเมลนี้มีผู้ใช้อื่นแล้ว' })
@@ -263,7 +286,7 @@ router.put('/users/:id', async (req, res) => {
     }
     if (phone !== undefined) data.phone = phone
     if (role && role !== user.role) {
-      if (!['admin', 'user'].includes(role)) {
+      if (!['admin', 'user', 'driver'].includes(role)) {
         return res.status(400).json({ error: 'role ไม่ถูกต้อง' })
       }
       // Never demote the last remaining admin.
@@ -368,6 +391,24 @@ router.put('/bookings/:id/approve', async (req, res) => {
     const car = await findOne(collections.cars, { _id: booking.car_id })
     if (!car) return res.status(404).json({ error: 'ไม่พบรถยนต์' })
 
+    // Approving also decides who drives: an assigned driver, or the requester
+    // driving themselves. A body with no choice at all (legacy callers) is
+    // treated as "requester drives". When explicitly assigning, the driver must
+    // exist and hold the driver role.
+    const { self_drive, driver_id } = req.body || {}
+    let driver = null
+    if (self_drive === false && !driver_id) {
+      return res.status(400).json({ error: 'กรุณาเลือกพนักงานขับรถ หรือเลือกให้ผู้ยืมขับเอง' })
+    }
+    if (!self_drive && driver_id) {
+      const did = toId(driver_id)
+      driver = did ? await findOne(collections.users, { _id: did }) : null
+      if (!driver || driver.role !== 'driver') {
+        return res.status(400).json({ error: 'ไม่พบพนักงานขับรถที่เลือก' })
+      }
+    }
+    const selfDrive = !driver
+
     // Approving must not create a clash with a booking that was approved while
     // this one sat in the queue.
     const clash = await findOne(collections.bookings, {
@@ -383,14 +424,23 @@ router.put('/bookings/:id/approve', async (req, res) => {
     const changed = await updateOne(
       collections.bookings,
       { _id: booking._id, status: 'pending' },
-      { $set: { status: 'approved', updated_at: new Date() } }
+      {
+        $set: {
+          status: 'approved',
+          self_drive: selfDrive,
+          driver_id: driver ? driver._id : null,
+          driver_name: driver ? driver.name : '',
+          updated_at: new Date(),
+        },
+      }
     )
     if (!changed.matchedCount) return res.status(409).json({ error: 'รายการนี้ถูกดำเนินการไปแล้ว' })
 
+    const driverNote = driver ? ` มอบหมายพนักงานขับรถ: ${driver.name}` : ' (ผู้ยืมขับเอง)'
     await clearRequestNotifications(booking._id)
     await insertOne(collections.notifications, {
       user_id: booking.user_id,
-      message: `✅ อนุมัติการยืม ${car.brand} ${car.model} (${car.license_plate})`,
+      message: `✅ อนุมัติการยืม ${car.brand} ${car.model} (${car.license_plate})${driverNote}`,
       type: 'approved', related_type: 'booking', related_id: booking._id,
       is_read: false, created_at: new Date(),
     })

@@ -13,9 +13,16 @@ const bcrypt = require('bcryptjs')
 const { initDB, describe: describeDb, close, collections, find, findOne, insertOne, countDocuments } = require('./db.cjs')
 
 const SEED_USERS = [
-  { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: 'admin123', role: 'admin', phone: '081-000-0000' },
-  { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: 'user123', role: 'user', phone: '082-111-1111' },
-  { name: 'ณัฐธิภัทร์', email: 'nantipat44@gmail.com', password: '123456', role: 'user', phone: '089-444-4444' },
+  { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: 'admin123', role: 'admin', phone: '081-000-0000', position: 'ผู้ดูแลระบบ' },
+  { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: 'user123', role: 'user', phone: '082-111-1111', position: 'ครู' },
+  { name: 'ณัฐธิภัทร์', email: 'nantipat44@gmail.com', password: '123456', role: 'user', phone: '089-444-4444', position: 'เจ้าหน้าที่ธุรการ' },
+]
+
+// Drivers are seeded without a password — they are only assigned to bookings by
+// an admin and cannot sign in.
+const SEED_DRIVERS = [
+  { name: 'สมศักดิ์ ขับดี', email: 'driver1@carrental.local', phone: '086-555-5551', position: 'พนักงานขับรถ' },
+  { name: 'ประเสริฐ ทางไกล', email: 'driver2@carrental.local', phone: '086-555-5552', position: 'พนักงานขับรถ' },
 ]
 
 async function seed() {
@@ -32,6 +39,25 @@ async function seed() {
       password: hashed,
       role: u.role,
       phone: u.phone || '',
+      position: u.position || '',
+      id_card: '',
+      avatar: '',
+      token_version: 0,
+      created_at: new Date(),
+    })
+    created++
+  }
+
+  for (const d of SEED_DRIVERS) {
+    const existing = await findOne(collections.users, { email: d.email })
+    if (existing) continue
+    await insertOne(collections.users, {
+      name: d.name,
+      email: d.email,
+      password: '',
+      role: 'driver',
+      phone: d.phone || '',
+      position: d.position || '',
       id_card: '',
       avatar: '',
       token_version: 0,

@@ -127,6 +127,12 @@ router.get('/calendar', async (req, res) => {
         start_date: b.start_date,
         end_date: b.end_date,
         purpose: b.purpose || '',
+        destination_place: b.destination_place || '',
+        destination_district: b.destination_district || '',
+        destination_province: b.destination_province || '',
+        attendees: b.attendees || 0,
+        self_drive: !!b.self_drive,
+        driver_name: b.driver_name || '',
         status: b.status,
         created_at: b.created_at,
         brand: car.brand || '',
@@ -183,6 +189,12 @@ router.post('/bookings/lookup', async (req, res) => {
         start_date: b.start_date,
         end_date: b.end_date,
         purpose: b.purpose || '',
+        destination_place: b.destination_place || '',
+        destination_district: b.destination_district || '',
+        destination_province: b.destination_province || '',
+        attendees: b.attendees || 0,
+        self_drive: !!b.self_drive,
+        driver_name: b.driver_name || '',
         status: b.status,
         created_at: b.created_at,
         brand: car.brand || '',
@@ -319,7 +331,10 @@ router.post('/bookings/:id/cancel', async (req, res) => {
 
 router.post('/bookings', async (req, res) => {
   try {
-    const { name, phone, car_id, start_date, end_date, purpose, user_id } = req.body
+    const {
+      name, phone, car_id, start_date, end_date, purpose, user_id,
+      destination_place, destination_district, destination_province, attendees,
+    } = req.body
     if ((!user_id && !name) || !car_id || !start_date || !end_date) {
       return res.status(400).json({ error: 'กรุณากรอกชื่อผู้ยืม เลือกรถ และวันที่' })
     }
@@ -381,6 +396,13 @@ router.post('/bookings', async (req, res) => {
         start_date,
         end_date,
         purpose: purpose || '',
+        destination_place: destination_place || '',
+        destination_district: destination_district || '',
+        destination_province: destination_province || '',
+        attendees: Number(attendees) > 0 ? Number(attendees) : 0,
+        self_drive: false,
+        driver_id: null,
+        driver_name: '',
         status: 'pending',
         admin_notes: '',
         created_at: new Date(),

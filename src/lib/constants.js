@@ -18,6 +18,18 @@ export const STATUS_COLORS = {
   returned: '#3b82f6',
 }
 
+export const CAR_TYPES = ['รถเก๋ง', 'รถตู้', 'รถกระบะ', 'รถ SUV', 'รถบรรทุก', 'รถไฟฟ้า', 'อื่น ๆ']
+
+export const ROLE_LABELS = {
+  admin: 'ผู้ดูแล',
+  user: 'ผู้ใช้',
+  driver: 'พนักงานขับรถ',
+}
+
+export function roleLabel(r) {
+  return ROLE_LABELS[r] || r
+}
+
 export const PAGE_TITLES = {
   '/': 'แดชบอร์ด',
   '/notifications': 'การแจ้งเตือน',

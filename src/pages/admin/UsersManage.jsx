@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { apiGet, invalidateApi } from '../../lib/apiCache'
+import { roleLabel, badgeClass } from '../../lib/constants'
 import { Pager } from '../../components/ui/pager'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
@@ -18,7 +19,7 @@ export default function UsersManage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', id_card: '', role: 'user' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', position: '', id_card: '', role: 'user' })
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
 
@@ -37,10 +38,10 @@ export default function UsersManage() {
     setPasswordConfirm('')
     if (user) {
       setEditing(user)
-      setForm({ name: user.name, email: user.email, password: '', phone: user.phone || '', id_card: user.id_card || '', role: user.role })
+      setForm({ name: user.name, email: user.email, password: '', phone: user.phone || '', position: user.position || '', id_card: user.id_card || '', role: user.role })
     } else {
       setEditing(null)
-      setForm({ name: '', email: '', password: '', phone: '', id_card: '', role: 'user' })
+      setForm({ name: '', email: '', password: '', phone: '', position: '', id_card: '', role: 'user' })
     }
     setShowModal(true)
   }
@@ -151,15 +152,21 @@ export default function UsersManage() {
                     <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">{u.email}</span>
                   </div>
                 </div>
-                <span className={u.role === 'admin' ? 'badge-approved shrink-0' : 'badge-pending shrink-0'}>
-                  {u.role === 'admin' ? 'ผู้ดูแล' : 'ผู้ใช้'}
+                <span className={badgeClass(u.role === 'admin' ? 'approved' : u.role === 'driver' ? 'returned' : 'pending') + ' shrink-0'}>
+                  {roleLabel(u.role)}
                 </span>
               </div>
 
               {/* Details */}
               <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-3 space-y-2">
-                {(u.phone || u.id_card) && (
+                {(u.phone || u.id_card || u.position) && (
                   <>
+                    {u.position && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <i className="bx bx-briefcase text-sm text-gray-400 shrink-0"></i>
+                        <span className="text-gray-600 dark:text-gray-400">{u.position}</span>
+                      </div>
+                    )}
                     {u.phone && (
                       <div className="flex items-center gap-2 text-xs">
                         <i className="bx bx-phone text-sm text-gray-400 shrink-0"></i>
@@ -174,7 +181,7 @@ export default function UsersManage() {
                     )}
                   </>
                 )}
-                {!u.phone && !u.id_card && (
+                {!u.phone && !u.id_card && !u.position && (
                   <span className="text-xs text-gray-400">ไม่มีข้อมูลเพิ่มเติม</span>
                 )}
               </div>
@@ -207,6 +214,7 @@ export default function UsersManage() {
               <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ชื่อ</th>
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">อีเมล</th>
+                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ตำแหน่ง</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เบอร์</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เลขบัตร ปชช</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สิทธิ์</th>
@@ -220,11 +228,12 @@ export default function UsersManage() {
                     <span className="text-sm font-medium text-gray-900 dark:text-white">{u.name}</span>
                   </td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400">{u.email}</td>
+                  <td className="p-3 sm:p-4 text-sm text-gray-600 dark:text-gray-300">{u.position || '-'}</td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{u.phone || '-'}</td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 font-mono text-center">{u.id_card || '-'}</td>
                   <td className="p-3 sm:p-4 text-center">
-                    <span className={u.role === 'admin' ? 'badge-approved' : 'badge-pending'}>
-                      {u.role === 'admin' ? 'ผู้ดูแล' : 'ผู้ใช้'}
+                    <span className={badgeClass(u.role === 'admin' ? 'approved' : u.role === 'driver' ? 'returned' : 'pending')}>
+                      {roleLabel(u.role)}
                     </span>
                   </td>
                   <td className="p-3 sm:p-4 text-center">
@@ -324,28 +333,52 @@ export default function UsersManage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">สิทธิ์</label>
-                  <div className="flex gap-2 h-11">
-                    <button type="button" onClick={() => updateForm('role', 'user')}
-                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                        form.role === 'user'
-                          ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500 dark:bg-emerald-900/30 dark:text-emerald-300'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}>
-                      <i className="bx bx-user text-base"></i>
-                      ผู้ใช้
-                    </button>
-                    <button type="button" onClick={() => updateForm('role', 'admin')}
-                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                        form.role === 'admin'
-                          ? 'border-purple-400 bg-purple-50 text-purple-700 dark:border-purple-500 dark:bg-purple-900/30 dark:text-purple-300'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                      }`}>
-                      <i className="bx bxs-check-shield text-base"></i>
-                      ผู้ดูแล
-                    </button>
+                  <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ตำแหน่ง</label>
+                  <div className="relative">
+                    <i className="bx bx-briefcase absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <input value={form.position} onChange={e => updateForm('position', e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="เช่น ครู, เจ้าหน้าที่" />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">สิทธิ์</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button type="button" onClick={() => updateForm('role', 'user')}
+                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.role === 'user'
+                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500 dark:bg-emerald-900/30 dark:text-emerald-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}>
+                    <i className="bx bx-user text-base"></i>
+                    ผู้ใช้
+                  </button>
+                  <button type="button" onClick={() => updateForm('role', 'admin')}
+                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.role === 'admin'
+                        ? 'border-purple-400 bg-purple-50 text-purple-700 dark:border-purple-500 dark:bg-purple-900/30 dark:text-purple-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}>
+                    <i className="bx bxs-check-shield text-base"></i>
+                    ผู้ดูแล
+                  </button>
+                  <button type="button" onClick={() => updateForm('role', 'driver')}
+                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      form.role === 'driver'
+                        ? 'border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-300'
+                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}>
+                    <i className="bx bx-car text-base"></i>
+                    พนักงานขับรถ
+                  </button>
+                </div>
+                {form.role === 'driver' && (
+                  <p className="mt-2 text-xs text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                    <i className="bx bx-info-circle text-sm"></i>
+                    พนักงานขับรถไม่ต้องใช้รหัสผ่าน และไม่สามารถเข้าสู่ระบบได้
+                  </p>
+                )}
               </div>
 
               <div className={`grid transition-[grid-template-rows] motion-safe:duration-300 ${form.role === 'admin' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>

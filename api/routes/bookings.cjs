@@ -22,7 +22,10 @@ function overlapFilter(carId, start_date, end_date, extra = {}) {
 
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const { car_id, start_date, end_date, purpose, user_id } = req.body
+    const {
+      car_id, start_date, end_date, purpose, user_id,
+      destination_place, destination_district, destination_province, attendees,
+    } = req.body
     if (!car_id || !start_date || !end_date) {
       return res.status(400).json({ error: 'กรุณาเลือกรถและวันที่' })
     }
@@ -61,6 +64,13 @@ router.post('/', authMiddleware, async (req, res) => {
         start_date,
         end_date,
         purpose: purpose || '',
+        destination_place: destination_place || '',
+        destination_district: destination_district || '',
+        destination_province: destination_province || '',
+        attendees: Number(attendees) > 0 ? Number(attendees) : 0,
+        self_drive: false,
+        driver_id: null,
+        driver_name: '',
         status: 'pending',
         admin_notes: '',
         created_at: new Date(),
@@ -99,6 +109,10 @@ router.post('/', authMiddleware, async (req, res) => {
         start_date: booking.start_date,
         end_date: booking.end_date,
         purpose: booking.purpose || '',
+        destination_place: booking.destination_place || '',
+        destination_district: booking.destination_district || '',
+        destination_province: booking.destination_province || '',
+        attendees: booking.attendees || 0,
         status: booking.status,
         admin_notes: booking.admin_notes || '',
         created_at: booking.created_at,
@@ -138,6 +152,12 @@ router.get('/calendar', authMiddleware, async (req, res) => {
           start_date: b.start_date,
           end_date: b.end_date,
           purpose: b.purpose || '',
+          destination_place: b.destination_place || '',
+          destination_district: b.destination_district || '',
+          destination_province: b.destination_province || '',
+          attendees: b.attendees || 0,
+          self_drive: !!b.self_drive,
+          driver_name: b.driver_name || '',
           status: b.status,
           admin_notes: b.admin_notes || '',
           created_at: b.created_at,

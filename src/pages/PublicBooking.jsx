@@ -204,7 +204,7 @@ export default function PublicBooking() {
   const [availableCars, setAvailableCars] = useState([])
   const [carsLoading, setCarsLoading] = useState(false)
   const [users, setUsers] = useState([])
-  const [form, setForm] = useState({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '' })
+  const [form, setForm] = useState({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const [success, setSuccess] = useState(false)
@@ -250,7 +250,7 @@ export default function PublicBooking() {
       // Keep start_date + end_date (the date range the user picked)
       // so closing the modal doesn't throw away the date selection.
       // Only clear per-booking fields: user, car, purpose.
-      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '' }))
+      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
     }, 300)
   }
   const tabBarRef = useRef(null)
@@ -326,7 +326,7 @@ export default function PublicBooking() {
       // Keep start_date + end_date so the user can reuse the same date
       // range for another booking without re-picking. Only clear the
       // per-booking fields (user, car, purpose).
-      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '' }))
+      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
       // Re-fetch cars so the just-booked car disappears from the grid
       // (the API already filters out pending/approved bookings for this
       // date range). Keep the date selection and let the user pick another
@@ -502,11 +502,12 @@ export default function PublicBooking() {
                               {car.brand?.charAt(0)}{car.model?.charAt(0)}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-semibold text-gray-900 dark:text-white truncate">{car.brand} {car.model}</div>
-                              <div className="text-xs text-gray-400 truncate">{car.license_plate}</div>
+                              <div className="font-semibold text-gray-900 dark:text-white truncate">{car.license_plate}</div>
+                              <div className="text-xs text-gray-400 truncate">{car.brand} {car.model}</div>
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                            {car.type && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">{car.type}</span>}
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">{car.seats} ที่นั่ง</span>
                             {car.color && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">{car.color}</span>}
                             {car.year && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">{car.year}</span>}
@@ -745,6 +746,50 @@ export default function PublicBooking() {
                         <i className="bx bx-chevron-down text-base text-brand-500 dark:text-brand-400 shrink-0 ml-3" aria-hidden="true"></i>
                       </button>
                     )}
+                  </div>
+
+                  {/* Trip details — a 2×2 grid keeps the four short fields the
+                      same width as each other and avoids an orphaned narrow
+                      field on its own row. Tighter gap-4 inside the group vs.
+                      the form's space-y-5 between groups gives the rhythm a
+                      clear beat. */}
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 truncate">ชื่อสถานที่</label>
+                      <div className="relative">
+                        <i className="bx bx-map-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.destination_place} onChange={e => updateForm('destination_place', e.target.value)}
+                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          placeholder="ชื่อสถานที่" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 truncate">ชื่ออำเภอ</label>
+                      <div className="relative">
+                        <i className="bx bx-buildings absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.destination_district} onChange={e => updateForm('destination_district', e.target.value)}
+                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          placeholder="ชื่ออำเภอ" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 truncate">ชื่อจังหวัด</label>
+                      <div className="relative">
+                        <i className="bx bx-map absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.destination_province} onChange={e => updateForm('destination_province', e.target.value)}
+                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          placeholder="ชื่อจังหวัด" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5 truncate">จำนวนผู้ไปราชการ</label>
+                      <div className="relative">
+                        <i className="bx bx-group absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.attendees} onChange={e => updateForm('attendees', e.target.value)} type="number" min="1"
+                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          placeholder="จำนวนคน" />
+                      </div>
+                    </div>
                   </div>
 
                   <div>

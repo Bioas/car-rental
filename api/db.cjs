@@ -191,13 +191,21 @@ async function doInitDB() {
 }
 
 const SEED_CARS = [
-  ['กข 1234', 'Toyota', 'Camry', 'ขาว', 2023, 5, 'รถประจำตำแหน่งผู้บริหาร'],
-  ['กค 5678', 'Honda', 'Civic', 'ดำ', 2022, 5, ''],
-  ['กง 9012', 'Isuzu', 'D-Max', 'เงิน', 2023, 4, 'รถกระบะสำหรับขนของ'],
-  ['กจ 3456', 'Toyota', 'Fortuner', 'ดำ', 2024, 7, 'รถ SUV สำหรับเดินทางไกล'],
-  ['กช 2345', 'Nissan', 'Almera', 'แดง', 2023, 5, 'ประหยัดน้ำมัน'],
-  ['กซ 6789', 'Ford', 'Ranger', 'ขาว', 2022, 5, 'รถกระบะ 4 ประตู'],
-  ['กด 0123', 'MG', 'ZS EV', 'ฟ้า', 2024, 5, 'รถไฟฟ้า'],
+  // [license_plate, brand, model, type, color, year, seats, notes]
+  ['กข 1234', 'Toyota', 'Camry', 'รถเก๋ง', 'ขาว', 2023, 5, 'รถประจำตำแหน่งผู้บริหาร'],
+  ['กค 5678', 'Honda', 'Civic', 'รถเก๋ง', 'ดำ', 2022, 5, ''],
+  ['กง 9012', 'Isuzu', 'D-Max', 'รถกระบะ', 'เงิน', 2023, 4, 'รถกระบะสำหรับขนของ'],
+  ['กจ 3456', 'Toyota', 'Fortuner', 'รถ SUV', 'ดำ', 2024, 7, 'รถ SUV สำหรับเดินทางไกล'],
+  ['กช 2345', 'Nissan', 'Almera', 'รถเก๋ง', 'แดง', 2023, 5, 'ประหยัดน้ำมัน'],
+  ['กซ 6789', 'Ford', 'Ranger', 'รถกระบะ', 'ขาว', 2022, 5, 'รถกระบะ 4 ประตู'],
+  ['กด 0123', 'MG', 'ZS EV', 'รถเก๋ง', 'ฟ้า', 2024, 5, 'รถไฟฟ้า'],
+]
+
+// Sample drivers have no password: a driver is only ever assigned to a booking
+// by an admin, never able to sign in on their own.
+const SEED_DRIVERS = [
+  { name: 'สมศักดิ์ ขับดี', email: 'driver1@carrental.local', phone: '086-555-5551', position: 'พนักงานขับรถ' },
+  { name: 'ประเสริฐ ทางไกล', email: 'driver2@carrental.local', phone: '086-555-5552', position: 'พนักงานขับรถ' },
 ]
 
 async function seedInitialData(db) {
@@ -208,12 +216,13 @@ async function seedInitialData(db) {
 
   const now = new Date()
   await db.collection('users').insertMany([
-    { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: adminPass, role: 'admin', phone: '081-000-0000', id_card: '', avatar: '', token_version: 0, created_at: now },
-    { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: userPass, role: 'user', phone: '082-111-1111', id_card: '', avatar: '', token_version: 0, created_at: now },
+    { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: adminPass, role: 'admin', phone: '081-000-0000', id_card: '', avatar: '', position: 'ผู้ดูแลระบบ', token_version: 0, created_at: now },
+    { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: userPass, role: 'user', phone: '082-111-1111', id_card: '', avatar: '', position: 'ครู', token_version: 0, created_at: now },
+    ...SEED_DRIVERS.map((d) => ({ ...d, password: '', id_card: '', avatar: '', role: 'driver', token_version: 0, created_at: now })),
   ])
 
-  await db.collection('cars').insertMany(SEED_CARS.map(([license_plate, brand, model, color, year, seats, notes]) => ({
-    license_plate, brand, model, color, year, seats, notes, status: 'available', created_at: now,
+  await db.collection('cars').insertMany(SEED_CARS.map(([license_plate, brand, model, type, color, year, seats, notes]) => ({
+    license_plate, brand, model, type, color, year, seats, notes, status: 'available', created_at: now,
   })))
 }
 
