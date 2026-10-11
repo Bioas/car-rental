@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
-import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, USER, auth, dateRange } from './helpers.mjs'
+import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, auth, dateRange, createUser } from './helpers.mjs'
 
 // The overlap check is a read-then-write, so without serialization two requests
 // arriving at the same instant would both see "no conflict" and both insert.
@@ -13,12 +13,12 @@ const app = require('../server.cjs')
 const db = require('../db.cjs')
 
 let adminToken
-let userToken
+let staffToken // only staff may create/manage loan requests
 
 beforeAll(async () => {
   await db.initDB()
   adminToken = await loginAs(app, ADMIN.email, ADMIN.password)
-  userToken = await loginAs(app, USER.email, USER.password)
+  staffToken = (await createUser(app, adminToken, { role: 'staff', name: 'Concurrency Staff' })).token
 })
 
 afterAll(async () => {
@@ -44,8 +44,8 @@ describe(`concurrent authenticated bookings`, () => {
 
     const results = await Promise.all(
       Array.from({ length: 10 }, () =>
-        request(app).post('/api/bookings').set(auth(userToken))
-          .send({ car_id: carId, start_date, end_date })
+        request(app).post('/api/bookings').set(auth(staffToken))
+          .send({ car_id: carId, start_date, end_date, name: 'ผู้ยืมพร้อมกัน', phone: '0811111111' })
       )
     )
 
@@ -72,8 +72,8 @@ describe(`concurrent authenticated bookings`, () => {
     }
 
     const results = await Promise.all([
-      request(app).post('/api/bookings').set(auth(userToken)).send({ car_id: carId, start_date, end_date }),
-      request(app).post('/api/bookings').set(auth(userToken)).send({ car_id: carId, ...shifted }),
+      request(app).post('/api/bookings').set(auth(staffToken)).send({ car_id: carId, start_date, end_date, name: 'ผู้ยืมพร้อมกัน', phone: '0811111111' }),
+      request(app).post('/api/bookings').set(auth(staffToken)).send({ car_id: carId, ...shifted, name: 'ผู้ยืมพร้อมกัน', phone: '0811111111' }),
     ])
 
     const { created, conflicts, other } = tally(results)
@@ -92,7 +92,7 @@ describe(`concurrent public bookings`, () => {
     const results = await Promise.all(
       Array.from({ length: 8 }, () =>
         request(app).post('/api/public/bookings')
-          .send({ name, phone: '0877777777', car_id: carId, start_date, end_date })
+          .send({ name, phone: '0877777777', car_id: carId, start_date, end_date, signature: 'data:image/png;base64,iVBORw0KGgo=' })
       )
     )
 
@@ -101,8 +101,9 @@ describe(`concurrent public bookings`, () => {
     expect(created.length).toBe(1)
     expect(conflicts.length).toBe(7)
 
-    // The losing attempts must not have left stray borrower accounts behind.
-    const users = await db.find(db.collections.users, { name })
-    expect(users.length).toBe(1)
+    // Borrowers are never accounts at all — winning or losing, nothing should
+    // ever land in the users collection, and exactly one booking should exist.
+    expect(await db.countDocuments(db.collections.users, { name })).toBe(0)
+    expect(await db.countDocuments(db.collections.bookings, { user_name: name })).toBe(1)
   })
 })

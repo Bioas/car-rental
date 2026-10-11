@@ -34,6 +34,10 @@ export async function prepareDatabase(name = 'main') {
   await db.deleteMany(db.collections.cars, {})
   await db.deleteMany(db.collections.bookings, {})
   await db.deleteMany(db.collections.notifications, {})
+  // Signer assignments, document settings and the document-number counter
+  // must not leak from an earlier run either.
+  await db.deleteMany(db.collections.settings, {})
+  await db.deleteMany(db.collections.counters, {})
 
   return 'mongodb'
 }
@@ -41,10 +45,10 @@ export async function prepareDatabase(name = 'main') {
 export async function cleanupDatabase() {
   try {
     const db = require('../db.cjs')
-    await db.deleteMany(db.collections.users, {})
-    await db.deleteMany(db.collections.cars, {})
-    await db.deleteMany(db.collections.bookings, {})
-    await db.deleteMany(db.collections.notifications, {})
+    // Drop the whole per-suite test database (car-rental-test-*) so nothing is
+    // left behind in the developer's MongoDB after a run.
+    const database = await db.connect()
+    await database.dropDatabase()
     await db.close()
   } catch {
     /* nothing to clean up */
@@ -61,10 +65,35 @@ export async function loginAs(app, email, password) {
 }
 
 export const ADMIN = { email: 'admin@carrental.local', password: 'admin123' }
-export const USER = { email: 'somchai@carrental.local', password: 'user123' }
 
 export function auth(token) {
   return { Authorization: `Bearer ${token}` }
+}
+
+// There is no public self-registration and no "user" role anymore — every
+// account that can sign in is an admin, and only an existing admin can
+// provision another one. Tests that need a second, disposable logged-in
+// account (token revocation, account deletion, ...) go through this instead
+// of the old /api/auth/register.
+export async function createAdmin(app, adminToken, overrides = {}) {
+  return createUser(app, adminToken, { name: 'Extra Admin', role: 'admin', ...overrides })
+}
+
+/** Provision any login-capable role (admin or one of the five signer roles)
+ * through the admin API, the same way createAdmin always has. */
+export async function createUser(app, adminToken, overrides = {}) {
+  const email = overrides.email || `user-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`
+  const password = overrides.password || 'secret123'
+  const name = overrides.name || 'Extra User'
+  const role = overrides.role || 'admin'
+  const res = await request(app).post('/api/admin/users')
+    .set(auth(adminToken))
+    .send({ name, email, password, role })
+  if (res.status !== 201) {
+    throw new Error(`createUser failed: ${res.status} ${JSON.stringify(res.body)}`)
+  }
+  const token = await loginAs(app, email, password)
+  return { id: res.body.user.id, email, password, token, role }
 }
 
 /** A list of distinct future date ranges, so tests cannot collide on a car. */

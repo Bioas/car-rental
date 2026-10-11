@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Logo } from '../components/Logo'
 import { Skeleton } from '../components/ui/skeleton'
 import BookingDetailModal from '../components/BookingDetailModal'
 import { Toast } from '../components/ui/toast'
 import RangeDatePicker, { useIsMobile } from '../components/RangeDatePicker'
+import PrefixSelect from '../components/PrefixSelect'
+import SignaturePad from '../components/SignaturePad'
+import SignProgress from '../components/SignProgress'
 import { apiGet } from '../lib/apiCache'
+import { STATUS_COLORS, effectiveStatus, signStatus, formatThaiDate } from '../lib/constants'
 
 const CalendarPage = React.lazy(() => import('./CalendarPage'))
 
-const STATUS_COLORS = { pending: '#f59e0b', approved: '#10b981', rejected: '#ef4444', returned: '#3b82f6' }
-
-function statusLabel(s) {
-  const m = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธ', returned: 'คืนแล้ว' }
-  return m[s] || s
-}
-
+// Red invalid styling applied to a required field after a failed submit,
+// overriding the normal border + focus ring (Tailwind `!` importance).
+const INVALID_FIELD = '!border-red-400 dark:!border-red-500 focus:!border-red-400 focus:!ring-red-100 dark:focus:!ring-red-900/40'
 
 function todayStr() {
   return new Date().toLocaleDateString('en-CA')
@@ -37,10 +38,14 @@ function todayStr() {
 // to keep PublicBooking self-contained and avoid a new cross-file
 // dependency.
 const MODAL_THAI_SHORT = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-function fmtModalDate(dStr) {
+// Mobile uses a 2-digit Thai year (matches RangeDatePicker's own trigger
+// button) so the summary pill fits its narrow width without truncating.
+function fmtModalDate(dStr, short = false) {
   if (!dStr) return ''
   const d = new Date(dStr + 'T00:00:00')
-  return `${d.getDate()} ${MODAL_THAI_SHORT[d.getMonth() + 1]} ${d.getFullYear() + 543}`
+  const fullYear = d.getFullYear() + 543
+  const yearText = short ? String(fullYear % 100) : String(fullYear)
+  return `${d.getDate()} ${MODAL_THAI_SHORT[d.getMonth() + 1]} ${yearText}`
 }
 function modalDayDiff(start, end) {
   if (!start || !end) return 0
@@ -50,79 +55,6 @@ function modalDayDiff(start, end) {
 }
 
 
-
-function UserSelect({ value, onChange, options }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    function handler(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const selected = options.find(o => o.id === value)
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className={`w-full h-12 px-4 flex items-center justify-between bg-white dark:bg-gray-800 border-2 rounded-xl text-sm transition-all duration-200 focus:outline-none ${
-          open ? 'border-brand-400 ring-2 ring-brand-100' : 'border-gray-200 dark:border-gray-600 hover:border-brand-300'
-        } ${selected ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>
-        {selected ? (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 flex items-center justify-center text-brand-700 dark:text-brand-300 text-[10px] font-bold shrink-0">
-              {selected.name?.charAt(0)}
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-medium text-gray-800 dark:text-gray-100 leading-tight">{selected.name}</div>
-              {selected.phone && <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{selected.phone}</div>}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400">
-              <i className="bx bx-user text-base"></i>
-            </div>
-            <span>— เลือกผู้ยืม —</span>
-          </div>
-        )}
-        <i className={`bx bx-chevron-down text-base text-gray-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl shadow-xl overflow-hidden origin-top">
-          <div className="max-h-60 overflow-y-auto py-1">
-            {options.map(u => (
-              <button key={u.id} type="button"
-                onClick={() => { onChange(u.id); setOpen(false) }}
-                className={`w-full px-4 py-3 text-sm flex items-center gap-3 transition-colors hover:bg-brand-50 dark:hover:bg-brand-950/40 ${
-                  u.id === value ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50/50 dark:bg-brand-950/30' : 'text-gray-700 dark:text-gray-300'
-                }`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                  u.id === value ? 'bg-brand-500 text-white' : 'bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 text-brand-700 dark:text-brand-300'
-                }`}>
-                  {u.name?.charAt(0)}
-                </div>
-                <div className="text-left flex-1 min-w-0">
-                  <div className="text-sm font-medium leading-tight truncate">{u.name}</div>
-                  {u.phone && <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">{u.phone}</div>}
-                </div>
-                {u.id === value && (
-                  <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
-                )}
-              </button>
-            ))}
-            {options.length === 0 && (
-              <div className="px-4 py-3 text-xs text-gray-400 text-center">ไม่มีผู้ยืม</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function CarSelect({ value, onChange, options }) {
   const [open, setOpen] = useState(false)
@@ -150,8 +82,8 @@ function CarSelect({ value, onChange, options }) {
               {selected.brand?.charAt(0)}{selected.model?.charAt(0)}
             </div>
             <div className="text-left">
-              <div className="text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{selected.brand} {selected.model}</div>
-              <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{selected.license_plate} · {selected.seats} ที่นั่ง</div>
+              <div className="text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{selected.license_plate}</div>
+              <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{selected.brand} {selected.model} · {selected.seats} ที่นั่ง</div>
             </div>
           </div>
         ) : (
@@ -182,8 +114,8 @@ function CarSelect({ value, onChange, options }) {
                   {c.brand?.charAt(0)}{c.model?.charAt(0)}
                 </div>
                 <div className="text-left flex-1 min-w-0">
-                  <div className="text-sm font-medium leading-tight truncate">{c.brand} {c.model}</div>
-                  <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{c.license_plate} · {c.seats} ที่นั่ง</div>
+                  <div className="text-sm font-medium leading-tight truncate">{c.license_plate}</div>
+                  <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{c.brand} {c.model} · {c.seats} ที่นั่ง</div>
                 </div>
                 {c.id === value && (
                   <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
@@ -203,8 +135,10 @@ function CarSelect({ value, onChange, options }) {
 export default function PublicBooking() {
   const [availableCars, setAvailableCars] = useState([])
   const [carsLoading, setCarsLoading] = useState(false)
-  const [users, setUsers] = useState([])
-  const [form, setForm] = useState({ user_id: '', car_id: '', start_date: '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
+  const [form, setForm] = useState({ prefix: '', name: '', phone: '', position: '', car_id: '', start_date: '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
+  // Which required fields were empty the last time the user pressed ส่งคำขอยืม —
+  // drives the red invalid styling, and clears as soon as a field is filled.
+  const [formErrors, setFormErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const [success, setSuccess] = useState(false)
@@ -216,6 +150,10 @@ export default function PublicBooking() {
 
   const [activeTab, setActiveTab] = useState('cars')
   const [showBookingModal, setShowBookingModal] = useState(false)
+  // step: 'form' (field entry) → 'signature' (big full-page sign-before-send
+  // screen) → success. The actual POST only fires once the requester signs.
+  const [step, setStep] = useState('form')
+  const [signature, setSignature] = useState('')
   const [isClosing, setIsClosing] = useState(false)
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0)
   // isEditingDate: toggles the modal's date block between the
@@ -247,10 +185,12 @@ export default function PublicBooking() {
       setToast(null)
       setIsClosing(false)
       setIsEditingDate(false)
+      setStep('form')
+      setSignature('')
       // Keep start_date + end_date (the date range the user picked)
       // so closing the modal doesn't throw away the date selection.
-      // Only clear per-booking fields: user, car, purpose.
-      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
+      // Only clear per-booking fields: borrower, car, purpose.
+      setForm(prev => ({ ...prev, prefix: '', name: '', phone: '', position: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
     }, 300)
   }
   const tabBarRef = useRef(null)
@@ -263,8 +203,6 @@ export default function PublicBooking() {
     }
   }, [])
 
-  useEffect(() => { fetchUsers() }, [])
-
   useEffect(() => {
     if (showBookingModal) {
       document.body.style.overflow = 'hidden'
@@ -273,15 +211,6 @@ export default function PublicBooking() {
     }
     return () => { document.body.style.overflow = '' }
   }, [showBookingModal])
-
-  async function fetchUsers() {
-    try {
-      const res = await apiGet('/api/public/users', { ttl: 60000 })
-      if (res.ok) {
-        setUsers(res.data.users)
-      }
-    } catch (e) { console.error(e) }
-  }
 
   async function fetchCars(startDate, endDate, force = false) {
     setCarsLoading(true)
@@ -304,29 +233,79 @@ export default function PublicBooking() {
     })
   }
 
-  async function submitBooking(e) {
+  // Drop a field's red invalid state the moment it holds a value, no matter
+  // which control filled it (text input, car select, calendar, date picker).
+  useEffect(() => {
+    setFormErrors(prev => {
+      const next = { ...prev }
+      let changed = false
+      const clear = (k, ok) => { if (next[k] && ok) { next[k] = false; changed = true } }
+      clear('prefix', !!form.prefix)
+      clear('name', !!form.name.trim())
+      clear('phone', !!form.phone.trim())
+      clear('position', !!form.position.trim())
+      clear('car_id', !!form.car_id)
+      clear('start_date', !!form.start_date)
+      clear('end_date', !!form.end_date)
+      clear('destination_place', !!form.destination_place.trim())
+      clear('destination_district', !!form.destination_district.trim())
+      clear('destination_province', !!form.destination_province.trim())
+      clear('attendees', !!String(form.attendees).trim())
+      clear('purpose', !!form.purpose.trim())
+      return changed ? next : prev
+    })
+  }, [form])
+
+  // Validates the booking fields and, once they pass, swaps the modal to the
+  // big signature step instead of submitting — the actual POST only fires
+  // after the requester signs (see confirmSignedBooking below). Every empty
+  // required field is flagged at once so the red styling shows all the gaps.
+  function goToSignature(e) {
     e.preventDefault()
     setToast(null)
     setSuccess(false)
-    if (!form.user_id) { setToast({ type: 'error', submessage: 'กรุณาเลือกชื่อผู้ยืม' }); return }
-    if (!form.car_id) { setToast({ type: 'error', submessage: 'กรุณาเลือกรถ' }); return }
-    if (!form.start_date) { setToast({ type: 'error', submessage: 'กรุณาเลือกวันที่เริ่มต้น' }); return }
-    if (!form.end_date) { setToast({ type: 'error', submessage: 'กรุณาเลือกวันที่สิ้นสุด' }); return }
+    const errs = {}
+    if (!form.prefix) errs.prefix = true
+    if (!form.name.trim()) errs.name = true
+    // The phone number doubles as the credential for self-service
+    // cancel/return later, so it cannot be left blank.
+    if (!form.phone.trim()) errs.phone = true
+    if (!form.position.trim()) errs.position = true
+    if (!form.car_id) errs.car_id = true
+    if (!form.start_date) errs.start_date = true
+    if (!form.end_date) errs.end_date = true
+    if (!form.destination_place.trim()) errs.destination_place = true
+    if (!form.destination_district.trim()) errs.destination_district = true
+    if (!form.destination_province.trim()) errs.destination_province = true
+    if (!String(form.attendees).trim()) errs.attendees = true
+    if (!form.purpose.trim()) errs.purpose = true
+    setFormErrors(errs)
+    if (Object.keys(errs).length) {
+      setToast({ type: 'error', submessage: 'กรุณากรอกข้อมูลให้ครบถ้วน' })
+      return
+    }
+    setStep('signature')
+  }
 
+  async function confirmSignedBooking() {
+    if (!signature) { setToast({ type: 'error', submessage: 'กรุณาเซ็นชื่อหรืออัปโหลดรูปลายเซ็นก่อนส่งคำขอยืม' }); return }
+    setToast(null)
     setLoading(true)
     try {
       const res = await fetch('/api/public/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, signature })
       })
       const d = await res.json()
       if (!res.ok) { setToast({ type: 'error', submessage: d.error }); return }
       setSuccess(true)
+      setStep('form')
+      setSignature('')
       // Keep start_date + end_date so the user can reuse the same date
       // range for another booking without re-picking. Only clear the
-      // per-booking fields (user, car, purpose).
-      setForm(prev => ({ ...prev, user_id: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
+      // per-booking fields (borrower, car, purpose).
+      setForm(prev => ({ ...prev, prefix: '', name: '', phone: '', position: '', car_id: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' }))
       // Re-fetch cars so the just-booked car disappears from the grid
       // (the API already filters out pending/approved bookings for this
       // date range). Keep the date selection and let the user pick another
@@ -385,10 +364,9 @@ export default function PublicBooking() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950">
       <header className="relative z-10 flex items-center justify-center sm:justify-start px-6 lg:px-12 h-20">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center shadow-lg shadow-brand-500/30">
-            <i className="bx bx-car text-xl text-white"></i>
-          </div>
-          <span className="font-heading font-bold text-lg text-gray-900 dark:text-white">วิทยาลัยเทคนิคบุรีรัมย์</span>
+          <Logo size={44} />
+          {/* On phones the big heading below already names the college — logo only. */}
+          <span className="hidden sm:inline font-heading font-bold text-lg text-gray-900 dark:text-white">วิทยาลัยเทคนิคบุรีรัมย์</span>
         </div>
 
       </header>
@@ -396,9 +374,21 @@ export default function PublicBooking() {
       <main className="relative px-6 lg:px-12 pb-20 flex flex-col flex-1">
         <div className="max-w-6xl mx-auto w-full flex flex-col flex-1">
           <div className="text-center pt-2 pb-6">
-            <h1 className="text-4xl lg:text-5xl font-bold font-heading text-gray-900 dark:text-white mb-4">
-              ระบบจอง{' '}
-              <span className="text-brand-600">ยานพาหนะ</span>
+            {/* Layered title: the college name sits large behind, its blue
+                fading out toward the bottom where the system name overlaps it,
+                so the front line stays crisp. Both share one grid cell; DOM
+                order keeps the reading order natural. On load the back line fades
+                in and the front line slides up (motion-safe only). */}
+            <h1 className="grid justify-items-center font-bold font-heading mb-4 select-none"
+              style={{ paddingBottom: 'clamp(1.4rem, 3.1vw, 2.1rem)' }}>
+              <span className="col-start-1 row-start-1 self-end relative z-10 motion-safe:animate-title-front-in translate-y-[0.85em] sm:translate-y-[0.62em] text-gray-900 dark:text-white leading-tight whitespace-nowrap"
+                style={{ fontSize: 'clamp(1.6rem, 5vw, 3.25rem)' }}>
+                ระบบขออนุญาตใช้รถ
+              </span>
+              <span className="col-start-1 row-start-1 self-start motion-safe:animate-title-back-in bg-gradient-to-b from-brand-500/55 via-indigo-500/25 to-transparent dark:from-brand-400/80 dark:via-indigo-400/35 bg-clip-text text-transparent leading-[1.15] whitespace-nowrap tracking-tight"
+                style={{ fontSize: 'clamp(2rem, 8.6vw, 5.75rem)' }}>
+                {' '}วิทยาลัยเทคนิคบุรีรัมย์
+              </span>
             </h1>
 
           </div>
@@ -441,7 +431,7 @@ export default function PublicBooking() {
           {activeTab === 'cars' && (
           <section className="flex flex-col flex-1 motion-safe:animate-fade-in">
             <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">รถยนต์ที่พร้อมใช้งาน</h2>
+              <h2 className="text-2xl font-bold font-heading text-gray-900 dark:text-white">ยานพาหนะที่พร้อมใช้งาน</h2>
               <p className="text-gray-500 dark:text-gray-400 mt-1">เลือกวันที่ต้องการใช้งานและยานพาหนะ</p>
             </div>
 
@@ -595,19 +585,20 @@ export default function PublicBooking() {
                                 {b.brand?.charAt(0)}{b.model?.charAt(0)}
                               </div>
                               <div className="min-w-0 text-left">
-                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.brand} {b.model}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.license_plate}</p>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">{b.start_date} → {b.end_date}</p>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.license_plate}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.brand} {b.model}</p>
+                                <p className="text-xs text-gray-400 dark:text-gray-500">{formatThaiDate(b.start_date)} → {formatThaiDate(b.end_date)}</p>
                               </div>
                             </div>
                             <span className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full"
                               style={{
-                                backgroundColor: (STATUS_COLORS[b.status] || '#6b7280') + '20',
-                                color: STATUS_COLORS[b.status] || '#6b7280',
+                                backgroundColor: (STATUS_COLORS[effectiveStatus(b)] || '#6b7280') + '20',
+                                color: STATUS_COLORS[effectiveStatus(b)] || '#6b7280',
                               }}>
-                              {statusLabel(b.status)}
+                              {signStatus(b).label}
                             </span>
                           </div>
+                          {b.doc_number && b.signatures && <SignProgress booking={b} />}
                         </button>
                       ))}
                     </div>
@@ -620,12 +611,18 @@ export default function PublicBooking() {
 
           {/* Booking Modal */}
           {showBookingModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center px-4 sm:p-4" onClick={closeModal}>
             <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isClosing ? 'opacity-0' : ''}`} />
-            <div className={`relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-scale-in ${isClosing ? 'animate-scale-out' : ''}`}
+            <div className={`relative w-full overflow-y-auto scrollbar-none bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-scale-in ${isClosing ? 'animate-scale-out' : ''} ${
+                step === 'signature' && !success
+                  ? 'max-h-[70vh] sm:mx-auto sm:w-[720px] sm:max-h-[95vh]'
+                  : 'max-h-[70vh] sm:mx-auto sm:w-[640px] sm:max-h-[95vh]'
+              }`}
               onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">จองรถ</h2>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {step === 'signature' && !success ? 'เซ็นชื่อยืนยันคำขอยืม' : 'จองรถ'}
+                </h2>
                 <button onClick={() => { if (!loading) closeModal() }}
                   className="w-8 h-8 flex items-center justify-center rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200">
                   <i className="bx bx-x text-xl"></i>
@@ -650,18 +647,44 @@ export default function PublicBooking() {
                     ปิด
                   </button>
                 </div>
-              ) : (
-                <form onSubmit={submitBooking} className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ชื่อผู้ยืม</label>
-                      <UserSelect value={form.user_id} onChange={v => updateForm('user_id', v)} options={users} />
+              ) : step === 'signature' ? (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-4 border border-gray-100 dark:border-gray-700 space-y-1.5 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 dark:text-gray-400">ผู้ยืม</span>
+                      <span className="font-medium text-gray-900 dark:text-white text-right">{form.name}{form.position ? ` (${form.position})` : ''}</span>
                     </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">เลือกยานพาหนะ</label>
-                    <CarSelect value={form.car_id} onChange={v => updateForm('car_id', v)} options={availableCars.filter(c => c.status === 'available')} />
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 dark:text-gray-400">เบอร์โทรศัพท์</span>
+                      <span className="font-medium text-gray-900 dark:text-white">{form.phone}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 dark:text-gray-400">ช่วงวันที่ใช้รถ</span>
+                      <span className="font-medium text-gray-900 dark:text-white text-right">{fmtModalDate(form.start_date)} → {fmtModalDate(form.end_date)}</span>
+                    </div>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ลายเซ็นผู้ยืม</label>
+                    <SignaturePad value={signature} onChange={setSignature} />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => setStep('form')} disabled={loading}
+                      className="h-12 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 disabled:opacity-50">
+                      ย้อนกลับ
+                    </button>
+                    <button type="button" onClick={confirmSignedBooking} disabled={loading || !signature}
+                      className="flex-1 h-12 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 active:from-brand-700 active:to-brand-800 shadow-lg shadow-brand-300/40 hover:shadow-xl hover:shadow-brand-400/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                      {loading && (
+                        <i className="bx bx-loader-alt text-base animate-spin"></i>
+                      )}
+                      <span>{loading ? 'กำลังส่ง...' : 'ยืนยันส่งคำขอยืม'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={goToSignature} className="space-y-5" noValidate>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ช่วงวันที่ใช้รถ</label>
                     {/* Two-mode date block — toggles between:
@@ -730,22 +753,65 @@ export default function PublicBooking() {
                     ) : (
                       <button type="button" onClick={() => setIsEditingDate(true)}
                         aria-label="แก้ไขวันที่ใช้รถ"
-                        className="w-full flex items-center justify-between px-4 py-3 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl gap-3 cursor-pointer hover:bg-brand-100 dark:hover:bg-brand-950/50 active:bg-brand-200 dark:active:bg-brand-950/70 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-300 text-left">
+                        className={`w-full flex items-center justify-between px-4 py-3 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 rounded-xl gap-3 cursor-pointer hover:bg-brand-100 dark:hover:bg-brand-950/50 active:bg-brand-200 dark:active:bg-brand-950/70 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-300 text-left ${formErrors.start_date || formErrors.end_date ? INVALID_FIELD : ''}`}>
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="w-8 h-8 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm shrink-0">
                             <i className="bx bx-calendar text-brand-500" aria-hidden="true"></i>
                           </div>
                           <div className="text-sm font-medium text-brand-900 dark:text-brand-100 truncate">
                             {form.start_date && form.end_date
-                              ? <>{fmtModalDate(form.start_date)} → {fmtModalDate(form.end_date)} ({modalDayDiff(form.start_date, form.end_date)} วัน)</>
+                              ? <>{fmtModalDate(form.start_date, isMobile)} → {fmtModalDate(form.end_date, isMobile)} ({modalDayDiff(form.start_date, form.end_date)} วัน)</>
                               : form.start_date
-                                ? <>{fmtModalDate(form.start_date)} → <span className="text-amber-500">เลือกวันคืน</span></>
+                                ? <>{fmtModalDate(form.start_date, isMobile)} → <span className="text-amber-500">เลือกวันคืน</span></>
                                 : <span className="text-gray-400">ยังไม่ได้เลือกวันที่</span>}
                           </div>
                         </div>
                         <i className="bx bx-chevron-down text-base text-brand-500 dark:text-brand-400 shrink-0 ml-3" aria-hidden="true"></i>
                       </button>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">เลือกยานพาหนะ</label>
+                    <div className={formErrors.car_id ? 'rounded-xl ring-2 ring-red-400 dark:ring-red-500' : ''}>
+                      <CarSelect value={form.car_id} onChange={v => updateForm('car_id', v)} options={availableCars.filter(c => c.status === 'available')} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ชื่อผู้ยืม</label>
+                    <div className="flex gap-2">
+                      <PrefixSelect value={form.prefix} onChange={v => updateForm('prefix', v)}
+                        buttonClassName={`h-11 w-32 px-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.prefix ? INVALID_FIELD : ''}`} />
+                      <div className="relative flex-1 min-w-0">
+                        <i className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.name} onChange={e => updateForm('name', e.target.value)}
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.name ? INVALID_FIELD : ''}`}
+                          placeholder="ชื่อ-นามสกุล" required />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">เบอร์โทรศัพท์</label>
+                      <div className="relative">
+                        <i className="bx bx-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.phone} onChange={e => updateForm('phone', e.target.value)} type="tel"
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.phone ? INVALID_FIELD : ''}`}
+                          placeholder="เบอร์โทรศัพท์" required />
+                      </div>
+                      <p className="mt-1 text-[10px] text-gray-400">ใช้ยืนยันตัวตนตอนยกเลิก/คืนรถ</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">ตำแหน่ง</label>
+                      <div className="relative">
+                        <i className="bx bx-briefcase absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
+                        <input value={form.position} onChange={e => updateForm('position', e.target.value)}
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.position ? INVALID_FIELD : ''}`}
+                          placeholder="เช่น ครู, เจ้าหน้าที่" />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Trip details — a 2×2 grid keeps the four short fields the
@@ -759,7 +825,7 @@ export default function PublicBooking() {
                       <div className="relative">
                         <i className="bx bx-map-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                         <input value={form.destination_place} onChange={e => updateForm('destination_place', e.target.value)}
-                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.destination_place ? INVALID_FIELD : ''}`}
                           placeholder="ชื่อสถานที่" />
                       </div>
                     </div>
@@ -768,7 +834,7 @@ export default function PublicBooking() {
                       <div className="relative">
                         <i className="bx bx-buildings absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                         <input value={form.destination_district} onChange={e => updateForm('destination_district', e.target.value)}
-                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.destination_district ? INVALID_FIELD : ''}`}
                           placeholder="ชื่ออำเภอ" />
                       </div>
                     </div>
@@ -777,7 +843,7 @@ export default function PublicBooking() {
                       <div className="relative">
                         <i className="bx bx-map absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                         <input value={form.destination_province} onChange={e => updateForm('destination_province', e.target.value)}
-                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.destination_province ? INVALID_FIELD : ''}`}
                           placeholder="ชื่อจังหวัด" />
                       </div>
                     </div>
@@ -786,7 +852,7 @@ export default function PublicBooking() {
                       <div className="relative">
                         <i className="bx bx-group absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-gray-400"></i>
                         <input value={form.attendees} onChange={e => updateForm('attendees', e.target.value)} type="number" min="1"
-                          className="w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200"
+                          className={`w-full h-11 pl-10 pr-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 ${formErrors.attendees ? INVALID_FIELD : ''}`}
                           placeholder="จำนวนคน" />
                       </div>
                     </div>
@@ -795,16 +861,14 @@ export default function PublicBooking() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">เหตุผลการยืม</label>
                     <textarea value={form.purpose} onChange={e => updateForm('purpose', e.target.value)}
-                      className="w-full h-24 px-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 resize-none"
+                      className={`w-full h-24 px-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all duration-200 resize-none ${formErrors.purpose ? INVALID_FIELD : ''}`}
                       placeholder="ระบุวัตถุประสงค์การใช้งาน..." />
                   </div>
 
-                  <button type="submit" disabled={loading}
-                    className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 active:from-brand-700 active:to-brand-800 shadow-lg shadow-brand-300/40 hover:shadow-xl hover:shadow-brand-400/50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {loading && (
-                      <i className="bx bx-loader-alt text-base animate-spin"></i>
-                    )}
-                    <span>{loading ? 'กำลังส่ง...' : 'ส่งคำขอยืม'}</span>
+                  <button type="submit"
+                    className="w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-500 hover:to-brand-600 active:from-brand-700 active:to-brand-800 shadow-lg shadow-brand-300/40 hover:shadow-xl hover:shadow-brand-400/50 transition-all duration-200">
+                    <span>ถัดไป: เซ็นชื่อยืนยัน</span>
+                    <i className="bx bx-right-arrow-alt text-base"></i>
                   </button>
                 </form>
               )}
@@ -840,6 +904,7 @@ export default function PublicBooking() {
           <BookingDetailModal
             booking={detailBooking}
             publicMode={true}
+            lookupQuery={lookupQuery}
             canManageBookings={false}
             onClose={() => setDetailBooking(null)}
             onActionDone={refetchLookup}

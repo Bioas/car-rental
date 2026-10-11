@@ -28,7 +28,7 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !saving && onClose()}>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="card p-6 w-full max-w-md relative animate-scale-in" onClick={e => e.stopPropagation()}>
+      <div className="card p-6 w-full max-w-md relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0 bg-gradient-to-br from-emerald-400 to-emerald-600">
@@ -47,9 +47,9 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
 
         <div className="mb-4 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
           <i className="bx bx-car text-sm"></i>
-          <span className="font-medium text-gray-700 dark:text-gray-300">{booking.brand} {booking.model}</span>
+          <span className="font-medium text-gray-700 dark:text-gray-300">{booking.license_plate}</span>
           <span className="text-gray-400">·</span>
-          <span className="font-mono">{booking.license_plate}</span>
+          <span>{booking.brand} {booking.model}</span>
           {booking.user_name && (
             <>
               <span className="text-gray-400">·</span>

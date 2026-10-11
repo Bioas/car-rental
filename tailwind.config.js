@@ -51,8 +51,22 @@ export default {
         'slide-out-down': 'slideOutDown 0.25s ease-in forwards',
         'slide-out-right': 'slideOutRight 0.25s ease-in forwards',
         'bounce-up': 'bounceUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        // Public page layered heading (PublicBooking.jsx). Use with motion-safe:.
+        'title-back-in': 'titleBackIn 0.9s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'title-front-in': 'titleFrontIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both',
       },
       keyframes: {
+        // These animate the standalone `translate` / `scale` properties rather
+        // than `transform`, so they compose with the elements' own Tailwind
+        // translate-y offset instead of overriding it.
+        titleBackIn: {
+          '0%': { opacity: '0', scale: '0.97', filter: 'blur(6px)' },
+          '100%': { opacity: '1', scale: '1', filter: 'blur(0)' },
+        },
+        titleFrontIn: {
+          '0%': { opacity: '0', translate: '0 0.4em' },
+          '100%': { opacity: '1', translate: '0 0' },
+        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },

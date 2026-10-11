@@ -2,10 +2,14 @@
 // Ensures the documented test accounts exist (idempotent) and reports the
 // current state of the database. Safe to run repeatedly.
 //
-// db.cjs already auto-creates an admin and one user plus sample cars the first
-// time it initializes an empty database. This script additionally guarantees the
+// db.cjs already auto-creates an admin plus sample cars the first time it
+// initializes an empty database. This script additionally guarantees the
 // accounts documented in README.md exist, so the login instructions there always
 // work even on an already-populated database.
+//
+// There are only two kinds of accounts in this system: admins (sign in) and
+// drivers (assignment records, never sign in). Borrowers are not accounts —
+// a booking stores the borrower's name/phone directly (see api/routes/public.cjs).
 
 require('./lib/load-env.cjs').loadEnv()
 
@@ -14,8 +18,6 @@ const { initDB, describe: describeDb, close, collections, find, findOne, insertO
 
 const SEED_USERS = [
   { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: 'admin123', role: 'admin', phone: '081-000-0000', position: 'ผู้ดูแลระบบ' },
-  { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: 'user123', role: 'user', phone: '082-111-1111', position: 'ครู' },
-  { name: 'ณัฐธิภัทร์', email: 'nantipat44@gmail.com', password: '123456', role: 'user', phone: '089-444-4444', position: 'เจ้าหน้าที่ธุรการ' },
 ]
 
 // Drivers are seeded without a password — they are only assigned to bookings by

@@ -29,20 +29,4 @@ function pageParams(query, options = {}) {
   return { limit, page, offset: (page - 1) * limit }
 }
 
-/**
- * Shape a page of rows plus a total count into a stable response payload.
- * @param {any[]} items
- * @param {number} total
- * @param {{limit: number, page: number}} paging
- */
-function pagePayload(items, total, paging) {
-  return {
-    items,
-    total,
-    page: paging.page,
-    limit: paging.limit,
-    pages: Math.max(Math.ceil(total / paging.limit), 1),
-  }
-}
-
-module.exports = { pageParams, pagePayload, DEFAULT_LIMIT, MAX_LIMIT }
+module.exports = { pageParams, DEFAULT_LIMIT, MAX_LIMIT }

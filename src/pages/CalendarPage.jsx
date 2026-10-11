@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { apiGet, invalidateApi } from '../lib/apiCache'
-import { STATUS_COLORS, statusLabel, todayStr } from '../lib/constants'
+import { STATUS_COLORS, effectiveStatus, signStatus, todayStr } from '../lib/constants'
 import { BookingModal } from '../components/BookingModal'
 import BookingDetailModal from '../components/BookingDetailModal'
 import ApproveBookingModal from '../components/ApproveBookingModal'
+import SignDocumentModal from '../components/SignDocumentModal'
 import { Toast } from '../components/ui/toast'
 import { CalendarMonthGrid } from '../components/CalendarMonthGrid'
 import { Skeleton } from '../components/ui/skeleton'
@@ -27,8 +28,11 @@ function fmtThai(d) {
 }
 
 export default function CalendarPage({ publicMode, onDateClick, embedded }) {
-  const { authHeaders, isAdmin, fetchNotificationCount } = useApp()
-  const canManageBookings = isAdmin && !publicMode
+  const { authHeaders, user, refreshSignal, fetchNotificationCount, canManageBookings: canManageAny } = useApp()
+  // Admins only view the calendar; staff may also create/approve/reject/return.
+  const canManageBookings = canManageAny && !publicMode
+  // A staff account signs loan documents; the admin only manages them.
+  const canSign = !publicMode && user?.role === 'staff'
   const [rawBookings, setRawBookings] = useState([])
   const [cars, setCars] = useState([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +40,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   const [bookingDate, setBookingDate] = useState('')
   const [bookingCarId, setBookingCarId] = useState(null)
   const [detailBooking, setDetailBooking] = useState(null)
+  const [signQueue, setSignQueue] = useState([])
+  const [signTarget, setSignTarget] = useState(null)
   const [approveTarget, setApproveTarget] = useState(null)
   const [drivers, setDrivers] = useState([])
   const [approveSaving, setApproveSaving] = useState(false)
@@ -48,6 +54,22 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Documents still waiting on this signer's stage — decides whether the detail
+  // popup offers "เซ็นเอกสาร". The calendar endpoint carries no per-user state,
+  // so the sign queue is the source of truth.
+  useEffect(() => {
+    if (!canSign) { setSignQueue([]); return }
+    let cancelled = false
+    fetch('/api/signing/queue', { headers: authHeaders() })
+      .then(res => res.json())
+      .then(data => { if (!cancelled) setSignQueue(data.bookings || []) })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal, canSign])
+
+  const signableIds = new Set(signQueue.map(b => b.id))
 
   const weekDays = useMemo(() => {
     if (viewMode !== 'week') return []
@@ -204,6 +226,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
       if (onDateClick) onDateClick(dateStr, carId)
       return
     }
+    if (!canManageBookings) return
     setBookingDate(dateStr)
     setBookingCarId(carId)
     setBookingOpen(true)
@@ -267,8 +290,17 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
   }
 
   // Approving asks who drives. The detail modal closes and the choice modal
-  // opens on top; the driver list is fetched lazily.
+  // opens on top; the driver list is fetched lazily. For a signer acting on
+  // their own stage, "approve" is really "sign", so it opens the sign modal
+  // (which also picks the driver) instead.
   async function adminApprove(id) {
+    if (signableIds.has(id)) {
+      const queued = signQueue.find(b => b.id === id)
+      const fallback = detailBooking?.id === id ? detailBooking : rawBookings.find(b => b.id === id)
+      setDetailBooking(null)
+      setSignTarget(queued || fallback || null)
+      return
+    }
     const target = detailBooking && detailBooking.id === id
       ? detailBooking
       : rawBookings.find(b => b.id === id)
@@ -280,6 +312,23 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         if (res.ok) setDrivers(res.data.drivers || [])
       } catch {}
     }
+  }
+
+  async function refreshSignQueue() {
+    if (!canSign) return
+    try {
+      const res = await fetch('/api/signing/queue', { headers: authHeaders() })
+      const data = await res.json()
+      if (res.ok) setSignQueue(data.bookings || [])
+    } catch {}
+  }
+
+  async function handleSigned(message) {
+    setSignTarget(null)
+    invalidateApi()
+    await Promise.all([refreshSignQueue(), fetchData(true)])
+    fetchNotificationCount()
+    setToast({ type: 'success', submessage: message })
   }
 
   async function confirmApprove({ self_drive, driver_id }) {
@@ -371,7 +420,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           {!publicMode && <p className="text-[10px] sm:text-sm text-neutral-500 dark:text-gray-400 mt-0 sm:mt-1.5">ภาพรวมการใช้งานยานพาหนะ</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {!publicMode && (
+          {canManageBookings && (
           <button onClick={() => openBooking(todayStr(), null)}
             className="inline-flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 active:from-brand-600 active:to-brand-700 shadow-md shadow-brand-200/50 hover:shadow-lg hover:shadow-brand-300/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2">
             <i className="bx bx-plus text-sm sm:text-base"></i>
@@ -430,8 +479,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
               viewDate={viewDate}
               rawBookings={rawBookings}
               bookingBarColor={bookingBarColor}
-              statusLabel={statusLabel}
-              onCellClick={openBooking}
+              onCellClick={publicMode || canManageBookings ? openBooking : undefined}
               onBarClick={(b) => setDetailBooking(prev => (prev && prev.id === b.id ? prev : b))}
             />
           </div>
@@ -470,8 +518,8 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                       <div key={car.id} className="grid flex-1 min-h-[60px] sm:min-h-[80px] week-car-row" style={{ '--delay': `${ci * 0.05}s`, gridTemplateColumns: `clamp(90px, 18vw, 180px) repeat(7, 1fr)` }}>
                         <div className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-2 sm:px-3 border-b border-r border-neutral-100/30 dark:border-gray-700/30 flex items-center h-full">
                           <div className="min-w-0">
-                            <div className="text-xs sm:text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{car.brand} {car.model}</div>
-                            <div className="text-[9px] sm:text-[10px] text-neutral-400 dark:text-gray-500 truncate">{car.license_plate}</div>
+                            <div className="text-xs sm:text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{car.license_plate || `${car.brand} ${car.model}`}</div>
+                            {car.license_plate && <div className="text-[9px] sm:text-[10px] text-neutral-400 dark:text-gray-500 truncate">{car.brand} {car.model}</div>}
                           </div>
                         </div>
                         <div className="relative col-span-full h-full" style={{ gridColumn: '2 / 9' }}>
@@ -479,13 +527,17 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                             {weekDays.map(d => (
                               <div key={d.dateStr}
                                 onClick={() => openBooking(d.dateStr, car.id)}
-                                className={`border-b border-r border-neutral-100/30 dark:border-gray-700/30 transition-colors cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/30 ${
+                                className={`border-b border-r border-neutral-100/30 dark:border-gray-700/30 transition-colors ${publicMode || canManageBookings ? 'cursor-pointer hover:bg-brand-50/30 dark:hover:bg-brand-950/30' : ''} ${
                                   d.isToday ? 'bg-brand-50/40 dark:bg-brand-950/40' : ''
                                 }`} />
                             ))}
                           </div>
                           {bars.map((b, bi) => {
-                            const bgColor = bookingBarColor(b.status, b.user_id)
+                            // Shown status: an approved-but-unsigned booking
+                            // reads "รอดำเนินการ" (amber), not "อนุมัติแล้ว".
+                            const status = effectiveStatus(b)
+                            const statusText = signStatus(b).label
+                            const bgColor = bookingBarColor(status, b.user_name)
                             const gapPx = (maxTracks - 1) * 4
                             // Solid hex from STATUS_COLORS so admins can scan
                             // status visually at a glance across the row,
@@ -511,7 +563,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                             // because the fallback path is unreachable for
                             // any status registered in STATUS_COLORS
                             // (pending/approved/rejected/cancelled/returned).
-                            const statusColor = STATUS_COLORS[b.status] || '#6b7280'
+                            const statusColor = STATUS_COLORS[status] || '#6b7280'
                             return (
                               <div key={b.id}
                                 onClick={() => setDetailBooking(prev => (prev && prev.id === b.id ? prev : b))}
@@ -572,7 +624,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                                   style={{
                                     backgroundColor: statusColor,
                                   }}
-                                  title={statusLabel(b.status)}
+                                  title={statusText}
                                 />
                                 <span className="cal-bar-label min-w-0 truncate text-xs font-medium text-white flex-1">{b.user_name}</span>
                                 {/* TRAILING STATUS WORD — desktop only. Hidden
@@ -588,7 +640,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                                     glance-readability. whitespace-nowrap
                                     keeps "อนุมัติแล้ว" on one line so the
                                     trailing right edge feels anchored. */}
-                                <span className="cal-bar-label hidden sm:inline shrink-0 text-[9px] font-medium text-white/80 whitespace-nowrap">{statusLabel(b.status)}</span>
+                                <span className="cal-bar-label hidden sm:inline shrink-0 text-[9px] font-medium text-white/80 whitespace-nowrap">{statusText}</span>
                               </div>
                             )
                           })}
@@ -620,12 +672,19 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         booking={detailBooking}
         publicMode={!!publicMode}
         canManageBookings={canManageBookings}
+        canSign={canSign && !!detailBooking && signableIds.has(detailBooking.id)}
         onClose={() => setDetailBooking(null)}
                 onActionDone={() => { invalidateApi(); fetchData(true) }}
         setToast={setToast}
         onAdminApprove={(id) => adminApprove(id)}
         onOpenRejectModal={() => setRejectModal({ open: true, reason: '' })}
         onAdminReturn={(id) => adminReturn(id)}
+      />
+
+      <SignDocumentModal
+        booking={signTarget}
+        onClose={() => setSignTarget(null)}
+        onSigned={handleSigned}
       />
 
       <ApproveBookingModal
@@ -644,7 +703,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           onClick={() => setRejectModal({ open: false, reason: '' })}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-gray-700 w-full max-w-sm overflow-hidden animate-fade-in"
+          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-gray-700 w-full max-w-sm max-h-[70vh] overflow-y-auto scrollbar-none animate-fade-in sm:max-h-none sm:overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-neutral-100 dark:border-gray-700">
               <h3 className="font-bold text-neutral-800 dark:text-white text-base">ปฏิเสธคำขอยืม</h3>

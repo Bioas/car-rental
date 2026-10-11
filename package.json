@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node api/server.cjs",
-    "dev:all": "concurrently \"npm run dev:server\" \"npm run dev\"",
+    "dev:server": "node --watch api/server.cjs",
+    "dev:db": "node scripts/dev-db.cjs",
+    "dev:all": "concurrently -n db,api,web \"npm run dev:db\" \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview",
     "seed": "node api/seed.cjs",
@@ -16,6 +17,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "bcryptjs": "^3.0.3",
     "boxicons": "^2.1.4",
     "compression": "^1.8.2",
@@ -23,6 +25,7 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^6.10.0",
+    "pdf-lib": "^1.17.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1"

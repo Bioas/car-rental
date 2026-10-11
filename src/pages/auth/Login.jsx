@@ -1,10 +1,13 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Logo } from '../../components/Logo'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { afterLoginPath } from '../../lib/authRedirect'
 import { useApp } from '../../context/AppContext'
 import { Toast } from '../../components/ui/toast'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useApp()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -17,7 +20,7 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email, password)
-      navigate('/app/')
+      navigate(afterLoginPath(location), { replace: true })
     } catch (e) {
       setToast({ type: 'error', submessage: 'เข้าสู่ระบบไม่สำเร็จ', message: e.message })
     } finally {
@@ -30,9 +33,7 @@ export default function Login() {
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md animate-slide-up">
           <div className="text-center mb-10">
-            <div className="w-16 h-16 rounded-2xl bg-brand-600 flex items-center justify-center mx-auto mb-5 shadow-xl shadow-brand-500/30">
-              <i className="bx bx-car text-3xl text-white"></i>
-            </div>
+            <Logo size={80} className="mx-auto mb-5 shadow-xl shadow-brand-500/20" />
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white font-heading">เข้าสู่ระบบ</h1>
             <p className="text-gray-500 dark:text-gray-400 mt-1">ระบบบริหารจัดการยานพาหนะ</p>
           </div>
@@ -68,11 +69,10 @@ export default function Login() {
           <div className="absolute -bottom-20 -left-20 w-60 h-60 rounded-full bg-white blur-3xl"></div>
         </div>
         <div className="relative text-white text-center max-w-md">
-          <div className="w-20 h-20 rounded-2xl bg-white/10 backdrop-blur flex items-center justify-center mx-auto mb-8">
-            <i className="bx bx-car text-4xl"></i>
-          </div>
+          {/* White ring keeps the emblem's dark-red rim legible on the blue panel. */}
+          <Logo size={112} className="mx-auto mb-8 ring-4 ring-white/30 shadow-2xl" />
           <h2 className="text-3xl font-bold font-heading mb-4">ยินดีต้อนรับ</h2>
-          <p className="text-lg text-white/70">ระบบบริหารจัดการยานพาหนะสำหรับองค์กร จองง่าย จัดการสะดวก</p>
+          <p className="text-lg text-white/70">ระบบบริหารจัดการยานพาหนะสำหรับวิทยาลัยเทคนิคบุรีรัมย์</p>
         </div>
       </div>
     </div>

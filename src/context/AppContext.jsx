@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { invalidateApi } from '../lib/apiCache'
+import { resetSavedSignature } from '../lib/savedSignature'
 
 const AppContext = createContext(null)
 
@@ -32,7 +33,16 @@ export function AppProvider({ children }) {
   const lastNotifFetchRef = useRef(0)
 
   const isLoggedIn = !!token
-  const isAdmin = user?.role === 'admin'
+  // 'staff' accounts were given full admin-equivalent access by design (see
+  // api/middleware/auth.cjs's adminMiddleware) — every logged-in role other
+  // than 'driver' (which never logs in at all) counts as "admin" here, so
+  // the whole app shows the same pages/actions regardless of which of the
+  // two it is.
+  const isAdmin = user?.role === 'admin' || user?.role === 'staff'
+  // Only staff manage loan requests (approve/reject/return/create); an admin
+  // can view them but not act on them — mirrors bookingManagerMiddleware in
+  // api/middleware/auth.cjs.
+  const canManageBookings = user?.role === 'staff'
 
   const applyTheme = useCallback(() => {
     if (darkMode) {
@@ -69,6 +79,7 @@ export function AppProvider({ children }) {
     setToken(data.token)
     setUser(data.user)
     setUserLoaded(true)
+    resetSavedSignature()
     localStorage.setItem('token', data.token)
     invalidateApi()
   }, [])
@@ -84,6 +95,7 @@ export function AppProvider({ children }) {
     setToken(data.token)
     setUser(data.user)
     setUserLoaded(true)
+    resetSavedSignature()
     localStorage.setItem('token', data.token)
     invalidateApi()
   }, [])
@@ -108,8 +120,18 @@ export function AppProvider({ children }) {
     }
   }, [token])
 
+  // Profile page (src/pages/Profile.jsx): show edited details at once, and keep
+  // this session alive with the new token a password change hands back (the
+  // change revokes every older token).
+  const updateUser = useCallback((next) => setUser(next), [])
+  const replaceToken = useCallback((next) => {
+    setToken(next)
+    localStorage.setItem('token', next)
+  }, [])
+
   const logout = useCallback(() => {
     invalidateApi()
+    resetSavedSignature()
     setUser(null)
     setToken('')
     localStorage.removeItem('token')
@@ -149,7 +171,15 @@ export function AppProvider({ children }) {
       try {
         const data = JSON.parse(e.data)
         if (data.action === 'new-booking') {
-          setGlobalToast({ type: 'new-booking', submessage: 'มีคำขอยืมรถใหม่', message: data.user_name && data.car_brand ? `${data.user_name} — ${data.car_brand} ${data.car_model}` : 'คลิกเพื่อดูรายละเอียด' })
+          setGlobalToast({ type: 'new-booking', submessage: 'มีคำขอยืมรถใหม่', message: data.user_name && (data.car_label || data.car_brand) ? `${data.user_name} — ${data.car_label || `${data.car_brand} ${data.car_model}`}` : 'คลิกเพื่อดูรายละเอียด' })
+        } else if (data.action === 'notification') {
+          // Personal notifications from the signing workflow (api/lib/notify.cjs).
+          const text = {
+            sign_request: 'มีเอกสารรอคุณเซ็น',
+            approved: 'เอกสารเซ็นครบทุกขั้นแล้ว',
+            rejected: 'คำขอยืมไม่ได้รับอนุญาต',
+          }[data.type]
+          if (text) setGlobalToast({ type: data.type, submessage: text, message: 'คลิกเพื่อไปที่คำขอจอง' })
         }
       } catch {}
     })
@@ -234,11 +264,11 @@ export function AppProvider({ children }) {
   }, [])
 
   const value = {
-    user, token, isLoggedIn, isAdmin, userLoaded, sseConnected,
+    user, token, isLoggedIn, isAdmin, canManageBookings, userLoaded, sseConnected,
     darkMode, sidebarOpen, notificationCount, refreshSignal,
     globalToast, setGlobalToast,
     setNotificationCount, connectSSE,
-    login, register, fetchUser, logout,
+    login, register, fetchUser, logout, updateUser, replaceToken,
     toggleDark, toggleSidebar, fetchNotificationCount,
     authHeaders,
   }

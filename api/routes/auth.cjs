@@ -1,6 +1,6 @@
 const { Router } = require('express')
 const bcrypt = require('bcryptjs')
-const { collections, findOne, insertOne, updateOne, toId, str } = require('../db.cjs')
+const { collections, findOne, updateOne, toId, str } = require('../db.cjs')
 const { generateToken, authMiddleware } = require('../middleware/auth.cjs')
 const { sendError } = require('../lib/http-error.cjs')
 
@@ -21,48 +21,9 @@ function publicUser(u) {
   }
 }
 
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password, phone, id_card } = req.body
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'กรุณากรอกชื่อ อีเมล และรหัสผ่าน' })
-    }
-    if (String(password).length < 6) {
-      return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
-      return res.status(400).json({ error: 'รูปแบบอีเมลไม่ถูกต้อง' })
-    }
-
-    const existing = await findOne(collections.users, { email })
-    if (existing) {
-      return res.status(409).json({ error: 'อีเมลนี้มีในระบบแล้ว' })
-    }
-
-    const hashed = await bcrypt.hash(password, 10)
-    // Public self-registration always creates a plain user. Admin accounts are
-    // provisioned by `npm run seed` or by an existing admin — never by being the
-    // first row (which previously let anyone become admin on a fresh database).
-    let id
-    try {
-      id = await insertOne(collections.users, {
-        name, email, password: hashed, phone: phone || '', id_card: id_card || '',
-        avatar: '', role: 'user', token_version: 0, created_at: new Date(),
-      })
-    } catch (err) {
-      // Lost a race with another registration for the same email.
-      if (err && err.code === 11000) return res.status(409).json({ error: 'อีเมลนี้มีในระบบแล้ว' })
-      throw err
-    }
-
-    const user = await findOne(collections.users, { _id: id })
-    const token = generateToken(user)
-    res.status(201).json({ user: publicUser(user), token })
-  } catch (err) {
-    console.error('[auth] register failed:', err)
-    res.status(500).json({ error: (err && err.message) || 'Registration failed' })
-  }
-})
+// There is no public self-registration: the only accounts in this system are
+// admins and drivers, both provisioned by an existing admin (or `npm run
+// seed`) via /api/admin/users. Borrowers are not accounts at all.
 
 router.post('/login', async (req, res) => {
   try {
@@ -71,7 +32,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกอีเมลและรหัสผ่าน' })
     }
 
-    const user = await findOne(collections.users, { email })
+    const user = await findOne(collections.users, { email }, { projection: { saved_signature: 0 } })
     if (!user) {
       return res.status(401).json({ error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' })
     }
@@ -94,7 +55,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-    const user = await findOne(collections.users, { _id: toId(req.user.id) })
+    const user = await findOne(collections.users, { _id: toId(req.user.id) }, { projection: { saved_signature: 0 } })
     if (!user) return res.status(404).json({ error: 'User not found' })
     res.json({ user: publicUser(user) })
   } catch (err) {
@@ -102,18 +63,109 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 })
 
+// Profile edits (src/pages/Profile.jsx). Email and role stay admin-managed
+// (/api/admin/users) — they are the login and the permission level.
+const MAX_PROFILE_TEXT = 200
 router.put('/me', authMiddleware, async (req, res) => {
   try {
-    const { name, phone, id_card } = req.body
+    const { name, phone, id_card, position } = req.body || {}
     const updates = {}
-    if (name) updates.name = name
-    if (phone !== undefined) updates.phone = phone
-    if (id_card !== undefined) updates.id_card = id_card
+    if (name !== undefined) {
+      const value = String(name).trim()
+      if (!value) return res.status(400).json({ error: 'กรุณากรอกชื่อ' })
+      updates.name = value
+    }
+    if (phone !== undefined) updates.phone = String(phone).trim()
+    if (position !== undefined) updates.position = String(position).trim()
+    if (id_card !== undefined) updates.id_card = String(id_card).trim()
+    if (Object.values(updates).some((v) => v.length > MAX_PROFILE_TEXT)) {
+      return res.status(400).json({ error: `ข้อความยาวเกิน ${MAX_PROFILE_TEXT} ตัวอักษร` })
+    }
     if (Object.keys(updates).length > 0) {
       await updateOne(collections.users, { _id: toId(req.user.id) }, { $set: updates })
     }
-    const user = await findOne(collections.users, { _id: toId(req.user.id) })
+    const user = await findOne(collections.users, { _id: toId(req.user.id) }, { projection: { saved_signature: 0 } })
     res.json({ user: publicUser(user) })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// Change your own password. Bumping token_version signs out every other
+// session (api/middleware/auth.cjs checks it on each request); this one gets a
+// fresh token back so the person changing it stays signed in.
+router.put('/me/password', authMiddleware, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body || {}
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'กรุณากรอกรหัสผ่านปัจจุบันและรหัสผ่านใหม่' })
+    }
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร' })
+    }
+    const user = await findOne(collections.users, { _id: toId(req.user.id) }, { projection: { saved_signature: 0 } })
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    if (!(await bcrypt.compare(String(current_password), user.password || ''))) {
+      return res.status(400).json({ error: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' })
+    }
+    if (await bcrypt.compare(String(new_password), user.password || '')) {
+      return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม' })
+    }
+    const tokenVersion = (user.token_version || 0) + 1
+    await updateOne(collections.users, { _id: user._id }, {
+      $set: { password: await bcrypt.hash(String(new_password), 10), token_version: tokenVersion },
+    })
+    res.json({ message: 'เปลี่ยนรหัสผ่านแล้ว', token: generateToken({ ...user, token_version: tokenVersion }) })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// ── Saved signature ──
+// A staff signer can keep one signature image on their account and reuse it
+// with one tap in the sign modal (src/components/SignDocumentModal.jsx). It is
+// kept out of publicUser() — it can be hundreds of KB — and served on its own.
+// Signing still sends the image with each signature, so a saved signature
+// changes nothing about how a document is signed or checked.
+const MAX_SIGNATURE_LENGTH = 500_000
+function isValidSignature(value) {
+  return typeof value === 'string' && value.startsWith('data:image/') && value.length <= MAX_SIGNATURE_LENGTH
+}
+
+// Only staff sign documents (admins oversee, drivers never log in).
+function signerOnly(req, res, next) {
+  if (req.user.role !== 'staff') return res.status(403).json({ error: 'เฉพาะเจ้าหน้าที่ผู้เซ็นเอกสารเท่านั้น' })
+  next()
+}
+
+router.get('/me/signature', authMiddleware, signerOnly, async (req, res) => {
+  try {
+    const user = await findOne(collections.users, { _id: toId(req.user.id) }, { projection: { saved_signature: 1, saved_signature_at: 1 } })
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    res.json({ signature: user.saved_signature || '', updated_at: user.saved_signature_at || null })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+router.put('/me/signature', authMiddleware, signerOnly, async (req, res) => {
+  try {
+    const { signature } = req.body || {}
+    if (!isValidSignature(signature)) {
+      return res.status(400).json({ error: 'ลายเซ็นไม่ถูกต้อง หรือไฟล์ใหญ่เกินไป' })
+    }
+    const now = new Date()
+    await updateOne(collections.users, { _id: toId(req.user.id) }, { $set: { saved_signature: signature, saved_signature_at: now } })
+    res.json({ signature, updated_at: now })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+router.delete('/me/signature', authMiddleware, signerOnly, async (req, res) => {
+  try {
+    await updateOne(collections.users, { _id: toId(req.user.id) }, { $unset: { saved_signature: '', saved_signature_at: '' } })
+    res.json({ signature: '', updated_at: null })
   } catch (err) {
     sendError(res, err)
   }

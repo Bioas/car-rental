@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { apiGet, invalidateApi } from '../../lib/apiCache'
-import { roleLabel, badgeClass } from '../../lib/constants'
+import { roleLabel, badgeClass, ROLE_LABELS, splitNamePrefix, joinNamePrefix } from '../../lib/constants'
+import PrefixSelect from '../../components/PrefixSelect'
+import { useNamePrefixes } from '../../lib/docSettings'
 import { Pager } from '../../components/ui/pager'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 
 const PAGE_SIZE = 20
+
+// Full, literal Tailwind class strings per role — Tailwind's JIT scanner only
+// picks up classes that appear unbroken in source text, so these cannot be
+// built with template-literal interpolation (e.g. `border-${color}-400`).
+const ROLE_OPTIONS = [
+  { value: 'admin', icon: 'bxs-check-shield', active: 'border-purple-400 bg-purple-50 text-purple-700 dark:border-purple-500 dark:bg-purple-900/30 dark:text-purple-300' },
+  { value: 'staff', icon: 'bx-id-card', active: 'border-teal-400 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-900/30 dark:text-teal-300' },
+  { value: 'driver', icon: 'bx-car', active: 'border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-300' },
+]
+const INACTIVE_ROLE_CLASS = 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
 
 export default function UsersManage() {
   const { authHeaders } = useApp()
@@ -19,7 +31,8 @@ export default function UsersManage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', position: '', id_card: '', role: 'user' })
+  const namePrefixes = useNamePrefixes()
+  const [form, setForm] = useState({ prefix: '', name: '', email: '', password: '', phone: '', id_card: '', role: 'driver' })
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
 
@@ -38,10 +51,11 @@ export default function UsersManage() {
     setPasswordConfirm('')
     if (user) {
       setEditing(user)
-      setForm({ name: user.name, email: user.email, password: '', phone: user.phone || '', position: user.position || '', id_card: user.id_card || '', role: user.role })
+      const { prefix, name } = splitNamePrefix(user.name, user.prefix, namePrefixes)
+      setForm({ prefix, name, email: user.email, password: '', phone: user.phone || '', id_card: user.id_card || '', role: user.role })
     } else {
       setEditing(null)
-      setForm({ name: '', email: '', password: '', phone: '', position: '', id_card: '', role: 'user' })
+      setForm({ prefix: '', name: '', email: '', password: '', phone: '', id_card: '', role: 'driver' })
     }
     setShowModal(true)
   }
@@ -53,7 +67,7 @@ export default function UsersManage() {
   async function saveUser(e) {
     e.preventDefault()
     setError('')
-    if (form.role === 'admin' && form.password !== passwordConfirm) {
+    if (form.role !== 'driver' && form.password !== passwordConfirm) {
       setError('รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน')
       setSaving(false)
       return
@@ -64,7 +78,9 @@ export default function UsersManage() {
       const url = isEdit ? `/api/admin/users/${editing.id}` : '/api/admin/users'
       const method = isEdit ? 'PUT' : 'POST'
 
-      const body = { ...form }
+      // Stored like the booking form: the title is part of the name
+      // ("นายสมชาย ใจดี"), and kept separately so editing can split it again.
+      const body = { ...form, name: joinNamePrefix(form.prefix, form.name) }
       if (isEdit && !body.password) delete body.password
 
       const res = await fetch(url, {
@@ -159,14 +175,8 @@ export default function UsersManage() {
 
               {/* Details */}
               <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-3 space-y-2">
-                {(u.phone || u.id_card || u.position) && (
+                {(u.phone || u.id_card) && (
                   <>
-                    {u.position && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <i className="bx bx-briefcase text-sm text-gray-400 shrink-0"></i>
-                        <span className="text-gray-600 dark:text-gray-400">{u.position}</span>
-                      </div>
-                    )}
                     {u.phone && (
                       <div className="flex items-center gap-2 text-xs">
                         <i className="bx bx-phone text-sm text-gray-400 shrink-0"></i>
@@ -181,7 +191,7 @@ export default function UsersManage() {
                     )}
                   </>
                 )}
-                {!u.phone && !u.id_card && !u.position && (
+                {!u.phone && !u.id_card && (
                   <span className="text-xs text-gray-400">ไม่มีข้อมูลเพิ่มเติม</span>
                 )}
               </div>
@@ -214,7 +224,6 @@ export default function UsersManage() {
               <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ชื่อ</th>
                 <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">อีเมล</th>
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ตำแหน่ง</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เบอร์</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เลขบัตร ปชช</th>
                 <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สิทธิ์</th>
@@ -228,7 +237,6 @@ export default function UsersManage() {
                     <span className="text-sm font-medium text-gray-900 dark:text-white">{u.name}</span>
                   </td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400">{u.email}</td>
-                  <td className="p-3 sm:p-4 text-sm text-gray-600 dark:text-gray-300">{u.position || '-'}</td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{u.phone || '-'}</td>
                   <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 font-mono text-center">{u.id_card || '-'}</td>
                   <td className="p-3 sm:p-4 text-center">
@@ -268,7 +276,7 @@ export default function UsersManage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="card p-6 w-full max-w-lg relative animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0 ${
@@ -297,10 +305,14 @@ export default function UsersManage() {
             <form onSubmit={saveUser} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ชื่อผู้ใช้</label>
-                <div className="relative">
-                  <i className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
-                  <input value={form.name} onChange={e => updateForm('name', e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" required placeholder="ชื่อ-นามสกุล" />
+                <div className="flex gap-2">
+                  <PrefixSelect value={form.prefix} onChange={v => updateForm('prefix', v)} allowNone
+                    buttonClassName="h-11 w-32 px-3 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" />
+                  <div className="relative flex-1 min-w-0">
+                    <i className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <input value={form.name} onChange={e => updateForm('name', e.target.value)}
+                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" required placeholder="ชื่อ-นามสกุล" />
+                  </div>
                 </div>
               </div>
 
@@ -323,55 +335,27 @@ export default function UsersManage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">เลขบัตรประชาชน</label>
-                  <div className="relative">
-                    <i className="bx bx-id-card absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
-                    <input value={form.id_card} onChange={e => updateForm('id_card', e.target.value)}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="เลขบัตรประชาชน 13 หลัก" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ตำแหน่ง</label>
-                  <div className="relative">
-                    <i className="bx bx-briefcase absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
-                    <input value={form.position} onChange={e => updateForm('position', e.target.value)}
-                      className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="เช่น ครู, เจ้าหน้าที่" />
-                  </div>
+              <div>
+                <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">เลขบัตรประชาชน</label>
+                <div className="relative">
+                  <i className="bx bx-id-card absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                  <input value={form.id_card} onChange={e => updateForm('id_card', e.target.value)}
+                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="เลขบัตรประชาชน 13 หลัก" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">สิทธิ์</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <button type="button" onClick={() => updateForm('role', 'user')}
-                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                      form.role === 'user'
-                        ? 'border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500 dark:bg-emerald-900/30 dark:text-emerald-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}>
-                    <i className="bx bx-user text-base"></i>
-                    ผู้ใช้
-                  </button>
-                  <button type="button" onClick={() => updateForm('role', 'admin')}
-                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                      form.role === 'admin'
-                        ? 'border-purple-400 bg-purple-50 text-purple-700 dark:border-purple-500 dark:bg-purple-900/30 dark:text-purple-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}>
-                    <i className="bx bxs-check-shield text-base"></i>
-                    ผู้ดูแล
-                  </button>
-                  <button type="button" onClick={() => updateForm('role', 'driver')}
-                    className={`h-11 flex items-center justify-center gap-2 rounded-xl text-sm font-semibold border-2 transition-all ${
-                      form.role === 'driver'
-                        ? 'border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-300'
-                        : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}>
-                    <i className="bx bx-car text-base"></i>
-                    พนักงานขับรถ
-                  </button>
+                <div className="grid grid-cols-3 gap-2">
+                  {ROLE_OPTIONS.map(opt => (
+                    <button key={opt.value} type="button" onClick={() => updateForm('role', opt.value)}
+                      className={`min-h-11 py-2 px-2 flex flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold leading-tight text-center border-2 transition-all ${
+                        form.role === opt.value ? opt.active : INACTIVE_ROLE_CLASS
+                      }`}>
+                      <i className={`bx ${opt.icon} text-base`}></i>
+                      <span>{ROLE_LABELS[opt.value]}</span>
+                    </button>
+                  ))}
                 </div>
                 {form.role === 'driver' && (
                   <p className="mt-2 text-xs text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
@@ -381,11 +365,11 @@ export default function UsersManage() {
                 )}
               </div>
 
-              <div className={`grid transition-[grid-template-rows] motion-safe:duration-300 ${form.role === 'admin' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+              <div className={`grid transition-[grid-template-rows] motion-safe:duration-300 ${form.role !== 'driver' ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
                 <div className="overflow-hidden min-h-0">
                   <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800/50">
                     <div className="mb-3">
-                      <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">รหัสผ่านผู้ดูแล {editing && <span className="font-normal text-amber-600 dark:text-amber-400">(เว้นว่างไว้ไม่เปลี่ยน)</span>}</span>
+                      <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">รหัสผ่าน {editing && <span className="font-normal text-amber-600 dark:text-amber-400">(เว้นว่างไว้ไม่เปลี่ยน)</span>}</span>
                     </div>
                     <div className="space-y-3">
                       <div className="relative max-w-sm">
@@ -393,7 +377,7 @@ export default function UsersManage() {
                         <div className="relative">
                           <i className="bx bx-key absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-amber-400"></i>
                           <input value={form.password} onChange={e => updateForm('password', e.target.value)} type="password"
-                            className="w-full h-11 pl-10 pr-4 rounded-xl border-2 border-amber-200 dark:border-amber-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/50 transition-all" required={form.role === 'admin' && !editing} placeholder="รหัสผ่าน" />
+                            className="w-full h-11 pl-10 pr-4 rounded-xl border-2 border-amber-200 dark:border-amber-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:focus:ring-amber-900/50 transition-all" required={form.role !== 'driver' && !editing} placeholder="รหัสผ่าน" />
                         </div>
                       </div>
                       <div>
@@ -408,7 +392,7 @@ export default function UsersManage() {
                                   : passwordConfirm === form.password
                                     ? 'border-emerald-400 dark:border-emerald-500 focus:border-emerald-400 focus:ring-emerald-100 dark:focus:ring-emerald-900/50'
                                     : 'border-red-400 dark:border-red-500 focus:border-red-400 focus:ring-red-100 dark:focus:ring-red-900/50'
-                              }`} required={form.role === 'admin' && !editing} placeholder="ยืนยันรหัสผ่าน" />
+                              }`} required={form.role !== 'driver' && !editing} placeholder="ยืนยันรหัสผ่าน" />
                           </div>
                           {passwordConfirm && (
                             <span className="shrink-0">

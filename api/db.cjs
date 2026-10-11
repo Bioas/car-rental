@@ -80,6 +80,13 @@ const collections = {
   cars: () => requireDb().collection('cars'),
   bookings: () => requireDb().collection('bookings'),
   notifications: () => requireDb().collection('notifications'),
+  // Atomic $inc counters (e.g. the printed document number) — a single
+  // document per counter name, incremented via findOneAndUpdate so two
+  // concurrent bookings can never be handed the same number.
+  counters: () => requireDb().collection('counters'),
+  // Per-role default signer (api/routes/settings.cjs) — one document per
+  // signer role naming which user account signs that role's documents.
+  settings: () => requireDb().collection('settings'),
 }
 
 // ─── thin CRUD wrappers ──────────────────────────────────────────────────────
@@ -209,15 +216,11 @@ const SEED_DRIVERS = [
 ]
 
 async function seedInitialData(db) {
-  const [adminPass, userPass] = await Promise.all([
-    bcrypt.hash('admin123', 10),
-    bcrypt.hash('user123', 10),
-  ])
+  const adminPass = await bcrypt.hash('admin123', 10)
 
   const now = new Date()
   await db.collection('users').insertMany([
     { name: 'ผู้ดูแลระบบ', email: 'admin@carrental.local', password: adminPass, role: 'admin', phone: '081-000-0000', id_card: '', avatar: '', position: 'ผู้ดูแลระบบ', token_version: 0, created_at: now },
-    { name: 'สมชาย ใจดี', email: 'somchai@carrental.local', password: userPass, role: 'user', phone: '082-111-1111', id_card: '', avatar: '', position: 'ครู', token_version: 0, created_at: now },
     ...SEED_DRIVERS.map((d) => ({ ...d, password: '', id_card: '', avatar: '', role: 'driver', token_version: 0, created_at: now })),
   ])
 

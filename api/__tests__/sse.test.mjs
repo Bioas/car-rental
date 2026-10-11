@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import request from 'supertest'
-import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, auth } from './helpers.mjs'
+import { prepareDatabase, cleanupDatabase, require, loginAs, ADMIN, auth, createAdmin } from './helpers.mjs'
 
 // SSE connections are long-lived. The token is validated when the stream opens
 // AND periodically afterwards (SSE_REVALIDATE_MS is shortened in helpers.mjs),
@@ -108,19 +108,18 @@ describe(`SSE session validation`, () => {
   })
 
   it('closes the stream once the token is revoked', async () => {
-    const email = `sse-${Date.now()}@example.com`
-    const created = await request(app).post('/api/auth/register')
-      .send({ name: 'SSE User', email, password: 'firstpass' })
-    expect(created.status).toBe(201)
+    // There is no self-registration — a disposable second account is
+    // provisioned by the bootstrap admin instead.
+    const adminToken = await loginAs(app, ADMIN.email, ADMIN.password)
+    const created = await createAdmin(app, adminToken, { name: 'SSE User', email: `sse-${Date.now()}@example.com`, password: 'firstpass' })
 
-    const { res, stream } = await openStream(created.body.token)
+    const { res, stream } = await openStream(created.token)
     expect(res.status).toBe(200)
     expect((await stream.readUntil((t) => t.includes(':ok'))).matched).toBe(true)
 
     // Revoke the session the same way a password change does.
-    const adminToken = await loginAs(app, ADMIN.email, ADMIN.password)
     const changed = await request(app)
-      .put(`/api/admin/users/${created.body.user.id}`)
+      .put(`/api/admin/users/${created.id}`)
       .set(auth(adminToken))
       .send({ password: 'secondpass' })
     expect(changed.status).toBe(200)
@@ -130,14 +129,12 @@ describe(`SSE session validation`, () => {
   })
 
   it('drops the stream when the account is deleted', async () => {
-    const email = `gone-${Date.now()}@example.com`
-    const created = await request(app).post('/api/auth/register')
-      .send({ name: 'Deleted User', email, password: 'firstpass' })
-    const { stream } = await openStream(created.body.token)
+    const adminToken = await loginAs(app, ADMIN.email, ADMIN.password)
+    const created = await createAdmin(app, adminToken, { name: 'Deleted User', email: `gone-${Date.now()}@example.com`, password: 'firstpass' })
+    const { stream } = await openStream(created.token)
     expect((await stream.readUntil((t) => t.includes(':ok'))).matched).toBe(true)
 
-    const adminToken = await loginAs(app, ADMIN.email, ADMIN.password)
-    expect((await request(app).delete(`/api/admin/users/${created.body.user.id}`).set(auth(adminToken))).status).toBe(200)
+    expect((await request(app).delete(`/api/admin/users/${created.id}`).set(auth(adminToken))).status).toBe(200)
 
     expect((await stream.readUntil((t) => t.includes('session-expired'))).matched).toBe(true)
     expect(await stream.waitForClose()).toBe(true)

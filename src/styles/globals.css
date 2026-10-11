@@ -79,7 +79,7 @@
   }
 
   .card {
-    @apply bg-card-light dark:bg-card-dark rounded-2xl border border-neutral-100 dark:border-gray-700
+    @apply bg-card-light dark:bg-card-dark rounded-2xl border border-gray-200/80 dark:border-gray-700/70
            shadow-sm transition-all duration-300;
   }
 

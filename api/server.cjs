@@ -12,12 +12,14 @@ const bookingRoutes = require('./routes/bookings.cjs')
 const notificationRoutes = require('./routes/notifications.cjs')
 const adminRoutes = require('./routes/admin.cjs')
 const publicRoutes = require('./routes/public.cjs')
+const signingRoutes = require('./routes/signing.cjs')
 const { addClient } = require('./sse.cjs')
 const { verifyToken, resolveTokenUser } = require('./middleware/auth.cjs')
 const db = require('./db.cjs')
 
 const app = express()
-const PORT = process.env.PORT || 3000
+// PORT=0 (an OS-picked port) is treated as unset: the Vite dev proxy expects 3000.
+const PORT = Number(process.env.PORT) || 3000
 
 // How often an open SSE stream re-checks its token against the database.
 const SSE_REVALIDATE_MS = Number(process.env.SSE_REVALIDATE_MS || 15000)
@@ -76,6 +78,7 @@ app.use('/api/bookings', bookingRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/public', publicRoutes)
+app.use('/api/signing', signingRoutes)
 
 app.get('/api/events', async (req, res) => {
   const token = req.query.token

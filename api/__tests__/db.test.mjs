@@ -64,7 +64,7 @@ describe('database layer', () => {
 
   it('enforces the unique email index', async () => {
     await expect(db.insertOne(db.collections.users, {
-      name: 'Dup', email: 'admin@carrental.local', password: 'x', role: 'user', token_version: 0, created_at: new Date(),
+      name: 'Dup', email: 'admin@carrental.local', password: 'x', role: 'driver', token_version: 0, created_at: new Date(),
     })).rejects.toMatchObject({ code: 11000 })
   })
 

@@ -2,12 +2,26 @@ const { Router } = require('express')
 const bcrypt = require('bcryptjs')
 const {
   collections, find, findOne, insertOne, updateOne, updateMany,
-  deleteOne, countDocuments, aggregate, toId, str,
+  deleteOne, countDocuments, toId, str,
 } = require('../db.cjs')
 const { broadcastToRole, broadcastToUser } = require('../sse.cjs')
-const { authMiddleware, adminMiddleware } = require('../middleware/auth.cjs')
+const { authMiddleware, adminMiddleware, bookingManagerMiddleware } = require('../middleware/auth.cjs')
 const { pageParams } = require('../lib/pagination.cjs')
 const { sendError } = require('../lib/http-error.cjs')
+const { SIGN_STAGES, STAGE_KEYS, PARALLEL_STAGE_KEYS, WITHOUT_SIGNATURE_IMAGES } = require('../lib/signing.cjs')
+const { docNumberState, setNextDocNumber } = require('../lib/doc-number.cjs')
+const { getDocSettings, parseUpdate, updateDocSettings } = require('../lib/doc-settings.cjs')
+const { carText, notifyRejected, closeSignRequests } = require('../lib/notify.cjs')
+const { reconcilePaperSigners } = require('../lib/paper-signers.cjs')
+const { buildReport, previousRange, exportRows, toCsv, daysBetween, outcomeOf } = require('../lib/reports.cjs')
+const { isValidDate } = require('../lib/dates.cjs')
+
+// 'staff' is the single login role for anyone who signs loan documents —
+// which of the five document stages (api/lib/signing.cjs) a given staff
+// member actually handles is an assignment (see the stage-assignment
+// endpoints below), not a separate role, since who signs where is picked
+// per stage rather than baked into the account.
+const ALL_ROLES = ['admin', 'driver', 'staff']
 
 const router = Router()
 
@@ -29,6 +43,25 @@ function serializeCar(car) {
   }
 }
 
+// Each signature image is a base64 data URL of up to ~500 KB, so a 20-row page
+// would be tens of megabytes if they were shipped wholesale. The list only
+// needs the record of WHO signed each stage, WHEN, and with what decision —
+// the rendered document (api/lib/pdf.cjs) is where the actual signatures live.
+function serializeSignatures(signatures) {
+  const out = {}
+  for (const [key, entry] of Object.entries(signatures || {})) {
+    if (!entry || typeof entry !== 'object') continue
+    out[key] = {
+      user_id: str(entry.user_id),
+      name: entry.name || '',
+      position: entry.position || '',
+      decision: entry.decision || null,
+      signed_at: entry.signed_at || null,
+    }
+  }
+  return out
+}
+
 function serializeBooking(b, extras = {}) {
   return {
     id: str(b._id),
@@ -45,6 +78,16 @@ function serializeBooking(b, extras = {}) {
     driver_id: str(b.driver_id),
     driver_name: b.driver_name || '',
     status: b.status,
+    // The document number, the stage still awaiting signature, and the record
+    // of who already signed — the list row opens the sign modal directly
+    // (BookingsManage), and an approved row opens the full document with its
+    // signature chain, which is where the old "ประวัติการเซ็น" tab now lives.
+    doc_number: b.doc_number || null,
+    doc_label: b.doc_label || (b.doc_number ? String(b.doc_number) : null),
+    approval_stage: b.approval_stage || null,
+    signatures: serializeSignatures(b.signatures),
+    // Stages signed on paper, with the name printed on the PDF.
+    paper_signers: b.paper_signers || {},
     admin_notes: b.admin_notes || '',
     created_at: b.created_at,
     updated_at: b.updated_at,
@@ -52,10 +95,18 @@ function serializeBooking(b, extras = {}) {
   }
 }
 
+// A staff member's saved signature image (api/routes/auth.cjs) is large and
+// never part of a user listing.
+const NO_SIGNATURE = { saved_signature: 0 }
+
 function publicUser(u) {
   return {
     id: str(u._id),
     name: u.name,
+    // Title (นาย/นาง/นางสาว) picked in the user form. `name` already starts
+    // with it — the form sends the combined name, like the booking form does —
+    // so this only lets the edit form split it back out.
+    prefix: u.prefix || '',
     email: u.email,
     role: u.role,
     phone: u.phone || '',
@@ -66,23 +117,20 @@ function publicUser(u) {
   }
 }
 
-/** Attach user and car fields to a list of bookings (small in-memory join). */
+/** Attach car fields to a list of bookings (small in-memory join). The
+ * borrower's name/phone are not a join — they are stored directly on the
+ * booking, since a borrower is not a user account. */
 async function enrichBookings(bookings) {
-  const userIds = [...new Set(bookings.map((b) => str(b.user_id)))]
   const carIds = [...new Set(bookings.map((b) => str(b.car_id)))]
-  const [users, cars] = await Promise.all([
-    find(collections.users, { _id: { $in: userIds.map(toId).filter(Boolean) } }),
-    find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } }),
-  ])
-  const userById = new Map(users.map((u) => [str(u._id), u]))
+  const cars = await find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } })
   const carById = new Map(cars.map((c) => [str(c._id), c]))
 
   return bookings.map((b) => {
-    const u = userById.get(str(b.user_id)) || {}
     const c = carById.get(str(b.car_id)) || {}
     return serializeBooking(b, {
-      user_name: u.name || '',
-      user_email: u.email || '',
+      user_name: b.user_name || '',
+      user_phone: b.user_phone || '',
+      user_position: b.user_position || '',
       license_plate: c.license_plate || '',
       brand: c.brand || '',
       model: c.model || '',
@@ -200,12 +248,12 @@ router.get('/users', async (req, res) => {
     const paging = pageParams(req.query)
 
     if (!paging) {
-      const users = await find(collections.users, {}, { sort: { created_at: -1 } })
+      const users = await find(collections.users, {}, { sort: { created_at: -1 }, projection: NO_SIGNATURE })
       return res.json({ users: users.map(publicUser) })
     }
 
     const total = await countDocuments(collections.users, {})
-    const users = await find(collections.users, {}, { sort: { created_at: -1 }, skip: paging.offset, limit: paging.limit })
+    const users = await find(collections.users, {}, { sort: { created_at: -1 }, skip: paging.offset, limit: paging.limit, projection: NO_SIGNATURE })
     res.json({
       users: users.map(publicUser),
       total,
@@ -229,22 +277,132 @@ router.get('/drivers', async (req, res) => {
   }
 })
 
+// ─── DOCUMENT SIGN-STAGE ASSIGNMENTS ───
+//
+// Which staff account handles each of the five document stages (see
+// api/lib/signing.cjs). Stored one settings doc per stage, keyed by stage
+// key, e.g. { _id: 'vehicle_head', user_id: ObjectId(...) }.
+
+router.get('/stage-assignments', async (req, res) => {
+  try {
+    const [assignments, staff, docSettings] = await Promise.all([
+      find(collections.settings, { _id: { $in: STAGE_KEYS } }),
+      find(collections.users, { role: 'staff' }, { sort: { name: 1 }, projection: NO_SIGNATURE }),
+      getDocSettings(),
+    ])
+    const assignmentByStage = new Map(assignments.map((a) => [a._id, a]))
+    const staffById = new Map(staff.map((u) => [str(u._id), u]))
+
+    res.json({
+      stages: SIGN_STAGES.map((stage) => {
+        const assignment = assignmentByStage.get(stage.key)
+        const assignedUser = assignment ? staffById.get(str(assignment.user_id)) : null
+        return {
+          key: stage.key,
+          title: docSettings.stage_titles[stage.key],
+          default_title: stage.title,
+          section: stage.section,
+          user_id: assignedUser ? str(assignedUser._id) : null,
+          user_name: assignedUser ? assignedUser.name : '',
+        }
+      }),
+      staff: staff.map((u) => ({ id: str(u._id), name: u.name, email: u.email })),
+    })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+router.put('/stage-assignments/:key', async (req, res) => {
+  try {
+    const { key } = req.params
+    if (!STAGE_KEYS.includes(key)) {
+      return res.status(400).json({ error: 'ขั้นตอนการเซ็นเอกสารไม่ถูกต้อง' })
+    }
+    const { user_id } = req.body
+    if (!user_id) {
+      await deleteOne(collections.settings, { _id: key })
+      return res.json({ message: 'ยกเลิกผู้เซ็นสำหรับขั้นตอนนี้แล้ว' })
+    }
+    const uid = toId(user_id)
+    const user = uid ? await findOne(collections.users, { _id: uid }) : null
+    if (!user || user.role !== 'staff') {
+      return res.status(400).json({ error: 'ไม่พบเจ้าหน้าที่ที่เลือก' })
+    }
+    await updateOne(collections.settings, { _id: key }, { $set: { user_id: user._id } }, { upsert: true })
+    // A paper stage with no typed name prints the assigned signer's name.
+    const settings = await getDocSettings()
+    if (key in settings.paper_signers) await reconcilePaperSigners(settings)
+    res.json({ message: 'บันทึกผู้เซ็นสำหรับขั้นตอนนี้แล้ว' })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// Document settings — agency header, number format, stage titles and loan
+// rules (api/lib/doc-settings.cjs).
+router.get('/settings/document', async (req, res) => {
+  try {
+    res.json(await getDocSettings())
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+router.put('/settings/document', async (req, res) => {
+  try {
+    const { set, error } = parseUpdate(req.body || {})
+    if (error) return res.status(400).json({ error })
+    const settings = await updateDocSettings(set)
+    // Documents still being signed pick up a changed paper/system choice.
+    const updated = set.paper_signers ? await reconcilePaperSigners(settings) : 0
+    res.json({ message: 'บันทึกการตั้งค่าเอกสารแล้ว', settings, updated_documents: updated })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// Document-number ("เลขที่") sequence — lets an admin choose which number the
+// next loan request starts from (e.g. back to 1 at the start of a year).
+router.get('/settings/doc-number', async (req, res) => {
+  try {
+    res.json(await docNumberState())
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+router.put('/settings/doc-number', async (req, res) => {
+  try {
+    const next = Number(req.body && req.body.next)
+    if (!Number.isInteger(next) || next < 1 || next > 1_000_000_000) {
+      return res.status(400).json({ error: 'เลขที่เอกสารต้องเป็นจำนวนเต็มตั้งแต่ 1 ขึ้นไป' })
+    }
+    await setNextDocNumber(next)
+    res.json({ message: `คำขอยืมถัดไปจะได้เลขที่ ${next}`, ...(await docNumberState()) })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
 router.post('/users', async (req, res) => {
   try {
-    let { name, email, password, phone, role, id_card, position } = req.body
+    let { name, prefix, email, password, phone, role, id_card, position } = req.body
     if (!name || !email) {
       return res.status(400).json({ error: 'กรุณากรอกชื่อและอีเมล' })
     }
-    const finalRole = role || 'user'
-    if (!['admin', 'user', 'driver'].includes(finalRole)) {
+    const finalRole = role || 'driver'
+    if (!ALL_ROLES.includes(finalRole)) {
       return res.status(400).json({ error: 'role ไม่ถูกต้อง' })
     }
-    // Only admins sign in; users and drivers are records that a booking is made
-    // for. A driver therefore never needs a password.
-    if (finalRole === 'admin' && !password) {
-      return res.status(400).json({ error: 'กรุณากรอกรหัสผ่านสำหรับผู้ดูแล' })
+    // Only drivers skip sign-in — they are records a booking is assigned to,
+    // never a sign-in account. Every other role (admin + staff) needs a
+    // password. Borrowers are not accounts at all — their name/phone live
+    // directly on the booking.
+    if (finalRole !== 'driver' && !password) {
+      return res.status(400).json({ error: 'กรุณากรอกรหัสผ่าน' })
     }
-    if (finalRole === 'admin' && String(password).length < 6) {
+    if (finalRole !== 'driver' && String(password).length < 6) {
       return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
     }
     if (!password) password = ''
@@ -253,7 +411,7 @@ router.post('/users', async (req, res) => {
 
     const hashed = await bcrypt.hash(password, 10)
     const id = await insertOne(collections.users, {
-      name, email, password: hashed, phone: phone || '', position: position || '', id_card: id_card || '',
+      name, prefix: String(prefix || '').trim(), email, password: hashed, phone: phone || '', position: position || '', id_card: id_card || '',
       avatar: '', role: finalRole, token_version: 0, created_at: new Date(),
     })
     const user = await findOne(collections.users, { _id: id })
@@ -269,10 +427,11 @@ router.put('/users/:id', async (req, res) => {
     const user = id ? await findOne(collections.users, { _id: id }) : null
     if (!user) return res.status(404).json({ error: 'ไม่พบผู้ใช้' })
 
-    const { name, email, password, phone, role, id_card, position } = req.body
+    const { name, prefix, email, password, phone, role, id_card, position } = req.body
     const data = {}
     let bumpToken = false
     if (name) data.name = name
+    if (prefix !== undefined) data.prefix = String(prefix || '').trim()
     if (position !== undefined) data.position = position
     if (email) {
       const dup = await findOne(collections.users, { email, _id: { $ne: user._id } })
@@ -286,7 +445,7 @@ router.put('/users/:id', async (req, res) => {
     }
     if (phone !== undefined) data.phone = phone
     if (role && role !== user.role) {
-      if (!['admin', 'user', 'driver'].includes(role)) {
+      if (!ALL_ROLES.includes(role)) {
         return res.status(400).json({ error: 'role ไม่ถูกต้อง' })
       }
       // Never demote the last remaining admin.
@@ -336,32 +495,144 @@ router.delete('/users/:id', async (req, res) => {
 
 // ─── BOOKINGS (Admin) ───
 
+// "อนุมัติแล้ว" must mean the five-person signature chain is complete. An admin
+// can still approve a request (assigning a driver) before every signer has
+// signed, so those rows are 'approved' in the database yet still await
+// signatures. The list exposes that state as its own tab, 'awaiting_signature'
+// (รอดำเนินการ), splitting the raw 'approved' status into signed vs. unsigned.
+// A stage signed on paper (paper_signers) counts as done — it is never signed
+// in the system.
+const MISSING_SIGNATURE_MATCH = STAGE_KEYS.map((key) => ({
+  [`signatures.${key}`]: { $exists: false },
+  [`paper_signers.${key}`]: { $exists: false },
+}))
+const AWAITING_SIGNATURE_FILTER = { status: 'approved', $or: MISSING_SIGNATURE_MATCH }
+const FULLY_SIGNED_FILTER = { status: 'approved', $nor: MISSING_SIGNATURE_MATCH }
+// Every request still moving through the signing chain — the admin's single
+// "รอดำเนินการ" bucket, since an admin never signs and has no queue of their own.
+const IN_PROGRESS_FILTER = { $or: [{ status: 'pending' }, AWAITING_SIGNATURE_FILTER] }
+// A signer with no assigned stage has no personal queue.
+const MATCH_NOTHING = { _id: null }
+
+/** Stage keys a staff account is the assigned signer for. */
+async function staffStageKeys(userId) {
+  const uid = toId(userId)
+  if (!uid) return []
+  const assignments = await find(collections.settings, { _id: { $in: STAGE_KEYS }, user_id: uid })
+  return assignments.map((a) => a._id)
+}
+
+/**
+ * "รออนุมัติ" for a signer: documents still waiting on a stage this account is
+ * assigned to — the same rule GET /api/signing/queue uses. The first three
+ * stages sign in parallel, so any of them may act while that window is open.
+ */
+function awaitingMySignatureFilter(stageKeys) {
+  const or = []
+  for (const key of stageKeys) {
+    if (PARALLEL_STAGE_KEYS.includes(key)) {
+      or.push({
+        approval_stage: { $in: PARALLEL_STAGE_KEYS },
+        [`signatures.${key}`]: { $exists: false },
+        [`paper_signers.${key}`]: { $exists: false },
+      })
+    } else {
+      or.push({ approval_stage: key })
+    }
+  }
+  if (or.length === 0) return MATCH_NOTHING
+  return { status: { $nin: ['rejected', 'returned'] }, approval_stage: { $ne: null }, $or: or }
+}
+
+/**
+ * "รอดำเนินการ" for a signer: documents they have personally signed that are
+ * still short of one or more signatures — their own signature moved the
+ * document out of "รออนุมัติ", but it only reads "อนุมัติแล้ว" once every stage
+ * has signed.
+ */
+function signedByMeIncompleteFilter(uid) {
+  return {
+    status: { $nin: ['rejected', 'returned'] },
+    $and: [
+      { $or: MISSING_SIGNATURE_MATCH },
+      { $or: STAGE_KEYS.map((key) => ({ [`signatures.${key}.user_id`]: uid })) },
+    ],
+  }
+}
+
+// One request, same shape as a list row — used to open a request from a
+// notification.
+router.get('/bookings/:id', async (req, res) => {
+  try {
+    const id = toId(req.params.id)
+    const row = id ? await findOne(collections.bookings, { _id: id }, { projection: WITHOUT_SIGNATURE_IMAGES }) : null
+    if (!row) return res.status(404).json({ error: 'ไม่พบคำขอยืม (อาจถูกยกเลิกไปแล้ว)' })
+    const [booking] = await enrichBookings([row])
+    res.json({ booking })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
 router.get('/bookings', async (req, res) => {
   try {
-    const { status } = req.query
-    const useStatusFilter = status && status !== 'all'
-    const filter = useStatusFilter ? { status } : {}
+    const status = req.query.status
+    // The signing tabs are personal for a signer: "รออนุมัติ" is the set still
+    // waiting on *their* stage and "รอดำเนินการ" the set they already signed
+    // but which is not fully signed yet. "อนุมัติแล้ว" stays the document-wide
+    // "every stage signed" state. An admin never signs, so for them there is
+    // no "waiting on me" set: "รอดำเนินการ" is every request still in progress
+    // (not yet fully signed, not rejected/returned).
+    const isSigner = req.user.role === 'staff'
+    const stageKeys = isSigner ? await staffStageKeys(req.user.id) : []
+    const uid = toId(req.user.id)
+    const pendingFilter = isSigner ? awaitingMySignatureFilter(stageKeys) : { status: 'pending' }
+    const awaitingFilter = isSigner ? signedByMeIncompleteFilter(uid) : IN_PROGRESS_FILTER
+
+    const filter = (() => {
+      switch (status) {
+        case undefined:
+        case '':
+        case 'all':
+          return {}
+        case 'awaiting_signature':
+          return awaitingFilter
+        case 'approved':
+          return FULLY_SIGNED_FILTER
+        case 'pending':
+          return pendingFilter
+        default:
+          return { status }
+      }
+    })()
+
     const paging = pageParams(req.query)
-    const findOptions = { sort: { created_at: -1 } }
+    const findOptions = { sort: { created_at: -1 }, projection: WITHOUT_SIGNATURE_IMAGES }
     if (paging) {
       findOptions.skip = paging.offset
       findOptions.limit = paging.limit
     }
 
     // Per-status totals power the filter chips without shipping every row.
-    // The three queries below are independent, so they run together.
-    const [countRows, rows, total] = await Promise.all([
-      aggregate(collections.bookings, [
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]),
+    // The queries below are independent, so they run together.
+    const [rows, total, countAll, countPending, countAwaiting, countApproved, countRejected, countReturned] = await Promise.all([
       find(collections.bookings, filter, findOptions),
       paging ? countDocuments(collections.bookings, filter) : Promise.resolve(null),
+      countDocuments(collections.bookings, {}),
+      countDocuments(collections.bookings, pendingFilter),
+      countDocuments(collections.bookings, awaitingFilter),
+      countDocuments(collections.bookings, FULLY_SIGNED_FILTER),
+      countDocuments(collections.bookings, { status: 'rejected' }),
+      countDocuments(collections.bookings, { status: 'returned' }),
     ])
 
-    const counts = { all: 0, pending: 0, approved: 0, rejected: 0, returned: 0 }
-    for (const row of countRows) {
-      counts[row._id] = row.count
-      counts.all += row.count
+    const counts = {
+      all: countAll,
+      pending: countPending,
+      awaiting_signature: countAwaiting,
+      approved: countApproved,
+      rejected: countRejected,
+      returned: countReturned,
     }
 
     if (!paging) {
@@ -381,7 +652,7 @@ router.get('/bookings', async (req, res) => {
   }
 })
 
-router.put('/bookings/:id/approve', async (req, res) => {
+router.put('/bookings/:id/approve', bookingManagerMiddleware, async (req, res) => {
   try {
     const id = toId(req.params.id)
     const booking = id ? await findOne(collections.bookings, { _id: id }) : null
@@ -440,7 +711,7 @@ router.put('/bookings/:id/approve', async (req, res) => {
     await clearRequestNotifications(booking._id)
     await insertOne(collections.notifications, {
       user_id: booking.user_id,
-      message: `✅ อนุมัติการยืม ${car.brand} ${car.model} (${car.license_plate})${driverNote}`,
+      message: `✅ อนุมัติการยืม ${carText(car)}${driverNote}`,
       type: 'approved', related_type: 'booking', related_id: booking._id,
       is_read: false, created_at: new Date(),
     })
@@ -454,7 +725,7 @@ router.put('/bookings/:id/approve', async (req, res) => {
   }
 })
 
-router.put('/bookings/:id/reject', async (req, res) => {
+router.put('/bookings/:id/reject', bookingManagerMiddleware, async (req, res) => {
   try {
     const { admin_notes } = req.body
     const id = toId(req.params.id)
@@ -472,12 +743,14 @@ router.put('/bookings/:id/reject', async (req, res) => {
     if (!changed.matchedCount) return res.status(409).json({ error: 'รายการนี้ถูกดำเนินการไปแล้ว' })
 
     await clearRequestNotifications(booking._id)
-    await insertOne(collections.notifications, {
-      user_id: booking.user_id,
-      message: `❌ ปฏิเสธการยืม ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''})${admin_notes ? ': ' + admin_notes : ''}`,
-      type: 'rejected', related_type: 'booking', related_id: booking._id,
-      is_read: false, created_at: new Date(),
-    })
+    // Borrowers have no account; the admins are the ones to tell. Open sign
+    // requests for this document are closed — nothing is left to sign.
+    try {
+      await closeSignRequests(booking._id)
+      await notifyRejected(booking, car, { note: admin_notes || '' })
+    } catch (err) {
+      console.error('[notify] reject:', err && err.message)
+    }
 
     broadcastToRole('admin', 'data-changed', { action: 'reject', booking_id: str(booking._id) })
     broadcastToUser(str(booking.user_id), 'data-changed', { action: 'reject', booking_id: str(booking._id) })
@@ -488,7 +761,7 @@ router.put('/bookings/:id/reject', async (req, res) => {
   }
 })
 
-router.put('/bookings/:id/return', async (req, res) => {
+router.put('/bookings/:id/return', bookingManagerMiddleware, async (req, res) => {
   try {
     const id = toId(req.params.id)
     const booking = id ? await findOne(collections.bookings, { _id: id }) : null
@@ -528,9 +801,9 @@ router.get('/reports', async (req, res) => {
     // and images keeps it an order of magnitude lighter.
     const [cars, users, bookings] = await Promise.all([
       find(collections.cars, {}, { projection: { brand: 1, model: 1, license_plate: 1, status: 1 } }),
-      find(collections.users, {}, { projection: { name: 1, email: 1 } }),
+      find(collections.users, {}, { projection: { _id: 1 } }),
       find(collections.bookings, {}, {
-        projection: { car_id: 1, user_id: 1, status: 1, created_at: 1, start_date: 1, end_date: 1 },
+        projection: { car_id: 1, user_name: 1, user_phone: 1, status: 1, created_at: 1, start_date: 1, end_date: 1 },
       }),
     ])
 
@@ -577,21 +850,164 @@ router.get('/reports', async (req, res) => {
       .slice(0, 12)
       .map(([month, count]) => ({ month, count, breakdown: monthStatusMap.get(month) || {} }))
 
-    const userById = new Map(users.map((u) => [str(u._id), u]))
-    const bookingCountByUser = new Map()
+    // Borrowers are not accounts, so "most frequent borrower" is grouped by
+    // the name/phone stored directly on each booking rather than a user join.
+    const bookingCountByBorrower = new Map()
     for (const b of bookings) {
-      const key = str(b.user_id)
-      bookingCountByUser.set(key, (bookingCountByUser.get(key) || 0) + 1)
+      const name = b.user_name || ''
+      if (!name) continue
+      const key = `${name}\u0000${b.user_phone || ''}`
+      const entry = bookingCountByBorrower.get(key) || { name, phone: b.user_phone || '', count: 0 }
+      entry.count++
+      bookingCountByBorrower.set(key, entry)
     }
-    const topUsers = [...bookingCountByUser.entries()]
-      .map(([userId, count]) => {
-        const u = userById.get(userId) || {}
-        return { id: userId, name: u.name || '', email: u.email || '', count }
-      })
+    const topUsers = [...bookingCountByBorrower.entries()]
+      .map(([key, entry]) => ({ id: key, name: entry.name, email: entry.phone, count: entry.count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5)
 
     res.json({ stats, bookingsByCar, bookingsByMonth, topUsers })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// ── Reports page (src/pages/admin/Reports.jsx) ──
+// Range is on the date of use; defaults to the last 12 months.
+function reportRange(query) {
+  const today = new Date().toLocaleDateString('en-CA')
+  let { from, to } = query
+  if (!to) to = today
+  if (!from) {
+    const d = new Date(`${to}T00:00:00Z`)
+    d.setUTCFullYear(d.getUTCFullYear() - 1)
+    d.setUTCDate(d.getUTCDate() + 1)
+    from = d.toISOString().slice(0, 10)
+  }
+  if (!isValidDate(from) || !isValidDate(to)) return { error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' }
+  if (from > to) return { error: 'วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด' }
+  if (daysBetween(from, to) > 3700) return { error: 'ช่วงเวลารายงานยาวได้ไม่เกิน 10 ปี' }
+  return { from, to }
+}
+
+// Only what the statistics read — notably each stage's signed_at, never the
+// base64 signature images.
+const REPORT_PROJECTION = {
+  car_id: 1, user_name: 1, user_phone: 1, user_position: 1, status: 1, created_at: 1,
+  start_date: 1, end_date: 1, destination_place: 1, destination_district: 1, destination_province: 1,
+  attendees: 1, purpose: 1, driver_name: 1, self_drive: 1, doc_number: 1, doc_label: 1,
+  ...Object.fromEntries(STAGE_KEYS.map((k) => [`signatures.${k}.signed_at`, 1])),
+  paper_signers: 1,
+}
+
+router.get('/reports/summary', async (req, res) => {
+  try {
+    const { from, to, error } = reportRange(req.query)
+    if (error) return res.status(400).json({ error })
+    const { prevFrom, prevTo } = previousRange(from, to)
+    const [cars, rows, docSettings] = await Promise.all([
+      find(collections.cars, {}, { projection: { brand: 1, model: 1, license_plate: 1, status: 1, type: 1 } }),
+      // One query covers both the range and the comparison period before it.
+      find(collections.bookings, { start_date: { $lte: to }, end_date: { $gte: prevFrom } }, { projection: REPORT_PROJECTION }),
+      getDocSettings(),
+    ])
+    const inRange = rows.filter((b) => b.start_date <= to && b.end_date >= from)
+    const previous = rows.filter((b) => b.start_date <= prevTo && b.end_date >= prevFrom)
+    res.json(buildReport({ bookings: inRange, previous, cars, from, to, prevFrom, prevTo, stageTitles: docSettings.stage_titles }))
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// ── Dashboard (src/pages/Dashboard.jsx) ──
+// Today-focused: each car's state right now, trips in the next 7 days, new
+// requests this month vs last, and a 6-month outcome trend. Compact payload —
+// no signature images.
+router.get('/dashboard', async (req, res) => {
+  try {
+    const now = new Date()
+    const today = now.toLocaleDateString('en-CA')
+    const weekAhead = new Date(now.getTime() + 7 * 86400000).toLocaleDateString('en-CA')
+    const trendFrom = new Date(now.getFullYear(), now.getMonth() - 5, 1).toLocaleDateString('en-CA')
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const { prevFrom, prevTo } = previousRange(trendFrom, today)
+
+    const [cars, rows, newThisMonth, newLastMonth, docSettings] = await Promise.all([
+      find(collections.cars, {}, { projection: { brand: 1, model: 1, license_plate: 1, status: 1, type: 1 }, sort: { brand: 1, model: 1 } }),
+      find(collections.bookings, { start_date: { $lte: weekAhead }, end_date: { $gte: prevFrom } }, { projection: REPORT_PROJECTION }),
+      countDocuments(collections.bookings, { created_at: { $gte: thisMonthStart } }),
+      countDocuments(collections.bookings, { created_at: { $gte: lastMonthStart, $lt: thisMonthStart } }),
+      getDocSettings(),
+    ])
+    const carById = new Map(cars.map((c) => [str(c._id), c]))
+    const live = rows.filter((b) => b.status === 'pending' || b.status === 'approved')
+
+    const fleet = cars.map((c) => {
+      const id = str(c._id)
+      const todays = live.filter((b) => str(b.car_id) === id && b.start_date <= today && b.end_date >= today)
+      const trip = todays.find((b) => b.status === 'approved') || todays[0] || null
+      let state = 'available'
+      if (c.status === 'maintenance' || c.status === 'retired') state = c.status
+      else if (trip) state = trip.status === 'approved' ? 'in_use' : 'requested'
+      return {
+        id, brand: c.brand, model: c.model, license_plate: c.license_plate, type: c.type || '', state,
+        trip: trip ? {
+          id: str(trip._id), user_name: trip.user_name || '', end_date: trip.end_date,
+          destination: trip.destination_province || trip.destination_place || '',
+          driver: trip.driver_name || (trip.self_drive ? 'ผู้ยืมขับเอง' : ''),
+        } : null,
+      }
+    })
+
+    const upcoming = live
+      .filter((b) => b.start_date > today && b.start_date <= weekAhead)
+      .sort((a, b) => (a.start_date < b.start_date ? -1 : a.start_date > b.start_date ? 1 : 0))
+      .slice(0, 8)
+      .map((b) => {
+        const car = carById.get(str(b.car_id)) || {}
+        return {
+          id: str(b._id), user_name: b.user_name || '', user_position: b.user_position || '',
+          brand: car.brand || '', model: car.model || '', license_plate: car.license_plate || '',
+          start_date: b.start_date, end_date: b.end_date,
+          destination: [b.destination_place, b.destination_province].filter(Boolean).join(' · '),
+          driver: b.driver_name || (b.self_drive ? 'ผู้ยืมขับเอง' : ''),
+          outcome: outcomeOf(b),
+          doc_label: b.doc_label || (b.doc_number ? String(b.doc_number) : ''),
+        }
+      })
+
+    const inTrend = rows.filter((b) => b.start_date <= today && b.end_date >= trendFrom)
+    const previous = rows.filter((b) => b.start_date <= prevTo && b.end_date >= prevFrom)
+    const report = buildReport({ bookings: inTrend, previous, cars, from: trendFrom, to: today, prevFrom, prevTo, stageTitles: docSettings.stage_titles })
+
+    res.json({
+      today,
+      fleet,
+      upcoming,
+      new_requests: { this_month: newThisMonth, last_month: newLastMonth },
+      trend: { from: trendFrom, to: today, by_month: report.by_month, kpis: report.kpis },
+    })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// Every request in the range as a CSV (UTF-8 with BOM, opens in Excel).
+router.get('/reports/export', async (req, res) => {
+  try {
+    const { from, to, error } = reportRange(req.query)
+    if (error) return res.status(400).json({ error })
+    const [cars, rows] = await Promise.all([
+      find(collections.cars, {}, { projection: { brand: 1, model: 1, license_plate: 1 } }),
+      find(collections.bookings, { start_date: { $lte: to }, end_date: { $gte: from } },
+        { projection: REPORT_PROJECTION, sort: { start_date: 1, created_at: 1 } }),
+    ])
+    const carById = new Map(cars.map((c) => [str(c._id), c]))
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="loan-requests-${from}-to-${to}.csv"`)
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(toCsv(exportRows(rows, carById, from, to)))
   } catch (err) {
     sendError(res, err)
   }

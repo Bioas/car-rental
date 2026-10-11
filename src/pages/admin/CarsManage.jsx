@@ -264,7 +264,7 @@ export default function CarsManage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="card p-6 w-full max-w-lg relative animate-scale-in" onClick={e => e.stopPropagation()}>
+          <div className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
               <div className="flex items-center gap-3">
@@ -283,7 +283,7 @@ export default function CarsManage() {
                     {editing ? 'แก้ไขรถยนต์' : 'เพิ่มรถยนต์ใหม่'}
                   </h3>
                   <p className="text-xs text-neutral-500">
-                    {editing ? `แก้ไขข้อมูล ${form.brand || '...'} ${form.model || ''}` : 'กรอกข้อมูลยานพาหนะใหม่'}
+                    {editing ? `แก้ไขข้อมูล ${form.license_plate || [form.brand, form.model].filter(Boolean).join(' ') || '...'}` : 'กรอกข้อมูลยานพาหนะใหม่'}
                   </p>
                 </div>
               </div>

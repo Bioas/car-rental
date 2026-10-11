@@ -267,8 +267,8 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
           {!inline && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 sm:hidden" onClick={() => { setOpen(false); setStep('start') }} />}
           <div className={inline ? 'block' : 'fixed inset-0 z-50 flex items-center justify-center px-4 pointer-events-none sm:absolute sm:inset-auto sm:top-full sm:mt-2 sm:left-0 sm:right-0 sm:block sm:p-0'}>
           <div ref={panelRef} className={inline
-            ? "pointer-events-auto w-full max-h-[60vh] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"
-            : "pointer-events-auto w-full max-h-[95vh] overflow-y-auto sm:mx-auto sm:w-[640px] sm:overflow-visible bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"}>
+            ? "pointer-events-auto w-full max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"
+            : "pointer-events-auto w-full max-h-[70vh] overflow-y-auto sm:mx-auto sm:w-[640px] sm:max-h-[95vh] sm:overflow-visible bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-2xl shadow-2xl motion-safe:animate-scale-in"}>
             <div className="p-4 sm:p-6 w-full">
             {isMobile ? (
               <>

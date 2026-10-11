@@ -6,28 +6,43 @@ const {
 const { broadcastToRole } = require('../sse.cjs')
 const { today, isValidDate } = require('../lib/dates.cjs')
 const { httpError, sendError } = require('../lib/http-error.cjs')
+const { nextDocNumber } = require('../lib/doc-number.cjs')
+const { renderBookingPdf } = require('../lib/pdf.cjs')
+const { SIGN_STAGES, remainingStages, currentStage, stagesToNotify, WITHOUT_SIGNATURE_IMAGES } = require('../lib/signing.cjs')
+const { resolvePaperSigners } = require('../lib/paper-signers.cjs')
+const { getDocSettings, formatDocLabel, checkBookingRules } = require('../lib/doc-settings.cjs')
+const { carText, notifyStageSigners } = require('../lib/notify.cjs')
+const { joinNamePrefix } = require('../lib/names.cjs')
+
+// A data: URI image, capped well above anything a signature pad or a phone
+// photo of a signature needs — guards against someone posting an enormous
+// upload through this public, unauthenticated endpoint.
+const MAX_SIGNATURE_LENGTH = 500_000
+function isValidSignature(value) {
+  return typeof value === 'string' && value.startsWith('data:image/') && value.length <= MAX_SIGNATURE_LENGTH
+}
 
 const router = Router()
 
-// Public cancel/return authenticate with the borrower's national ID card, which
-// is a weak shared secret. We at least normalize the value (strip spaces/dashes)
+// Public cancel/return authenticate with the borrower's phone number, which is
+// a weak shared secret. We at least normalize the value (strip spaces/dashes)
 // before comparing so the check is deterministic.
-function normalizeIdCard(value) {
+function normalizePhone(value) {
   return String(value || '').replace(/[\s-]/g, '')
 }
 
-// Public bookings derive an email from the borrower's name. The same name can
-// legitimately appear with a different phone, so make sure the generated email
-// never collides with an existing row (which previously caused a 500).
-async function uniquePublicEmail(name) {
-  const base = (String(name || '').replace(/\s+/g, '').toLowerCase() || 'user').slice(0, 60)
-  let email = `${base}@public.carrental`
-  let n = 1
-  while (await findOne(collections.users, { email })) {
-    email = `${base}+${n}@public.carrental`
-    n++
+// Signing progress for the borrower's tracking timeline: per stage only when it
+// was signed and the decision. Signature images, signer names and positions
+// stay out — the lookup is matched on a name substring, so anything here is
+// effectively public.
+function publicSignatureProgress(signatures) {
+  const out = {}
+  for (const key of ['requester', ...SIGN_STAGES.map((s) => s.key)]) {
+    const entry = signatures?.[key]
+    if (!entry) continue
+    out[key] = { signed_at: entry.signed_at || null, decision: entry.decision || 'approve' }
   }
-  return email
+  return out
 }
 
 function serializePublicCar(car, activeCount, upcomingCount) {
@@ -93,10 +108,18 @@ router.get('/cars', async (req, res) => {
   }
 })
 
-router.get('/users', async (req, res) => {
+// The parts of the document settings the public and staff screens need: the
+// signing-stage titles (timeline labels) and the loan rules (date limits).
+router.get('/document-settings', async (req, res) => {
   try {
-    const users = await find(collections.users, { role: 'user' }, { sort: { name: 1 } })
-    res.json({ users: users.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
+    const s = await getDocSettings()
+    res.json({
+      stage_titles: s.stage_titles,
+      min_notice_days: s.min_notice_days,
+      max_advance_days: s.max_advance_days,
+      max_duration_days: s.max_duration_days,
+      name_prefixes: s.name_prefixes,
+    })
   } catch (err) {
     sendError(res, err)
   }
@@ -106,23 +129,20 @@ router.get('/calendar', async (req, res) => {
   try {
     const rows = await find(collections.bookings, {
       status: { $in: ['pending', 'approved', 'returned'] },
-    }, { sort: { start_date: 1 } })
+    }, { sort: { start_date: 1 }, projection: WITHOUT_SIGNATURE_IMAGES })
 
-    const userIds = [...new Set(rows.map((b) => str(b.user_id)))]
     const carIds = [...new Set(rows.map((b) => str(b.car_id)))]
-    const [users, cars] = await Promise.all([
-      find(collections.users, { _id: { $in: userIds.map(toId).filter(Boolean) } }),
-      find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } }),
-    ])
-    const nameById = new Map(users.map((u) => [str(u._id), u.name]))
+    const cars = await find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } })
     const carById = new Map(cars.map((c) => [str(c._id), c]))
 
     const bookings = rows.map((b) => {
       const car = carById.get(str(b.car_id)) || {}
       return {
         id: str(b._id),
-        user_id: str(b.user_id),
-        user_name: nameById.get(str(b.user_id)) || '',
+        user_name: b.user_name || '',
+        // user_phone deliberately omitted: it is the credential for the public
+        // cancel/return/pdf endpoints, and this calendar is readable by anyone.
+        user_position: b.user_position || '',
         car_id: str(b.car_id),
         start_date: b.start_date,
         end_date: b.end_date,
@@ -134,6 +154,9 @@ router.get('/calendar', async (req, res) => {
         self_drive: !!b.self_drive,
         driver_name: b.driver_name || '',
         status: b.status,
+        doc_number: b.doc_number || null,
+        doc_label: b.doc_label || (b.doc_number ? String(b.doc_number) : null),
+        remaining_signers: remainingStages(b.signatures, b.paper_signers),
         created_at: b.created_at,
         brand: car.brand || '',
         model: car.model || '',
@@ -154,25 +177,23 @@ router.post('/bookings/lookup', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกชื่อหรือเบอร์โทรศัพท์' })
     }
 
-    // Search by name/phone only. National ID cards must not be a searchable key
-    // here: it would let anyone cross-reference a person's ID against their
-    // booking history, and the ID card is also the factor used to cancel/return.
+    // Search by name/phone directly on the booking — borrowers are not user
+    // accounts, so there is no users collection to join against. National ID
+    // cards must not be a searchable key here: it would let anyone
+    // cross-reference a person's ID against their booking history, and the ID
+    // card is also the factor used to cancel/return.
     const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const users = await find(collections.users, {
+    const rows = await find(collections.bookings, {
       $or: [
-        { name: { $regex: escaped, $options: 'i' } },
-        { phone: query },
+        { user_name: { $regex: escaped, $options: 'i' } },
+        { user_phone: query },
       ],
-    })
+    }, { sort: { created_at: -1 }, projection: WITHOUT_SIGNATURE_IMAGES })
 
-    if (users.length === 0) {
+    if (rows.length === 0) {
       return res.json({ bookings: [] })
     }
 
-    const ids = users.map((u) => u._id)
-    const rows = await find(collections.bookings, { user_id: { $in: ids } }, { sort: { created_at: -1 } })
-
-    const userById = new Map(users.map((u) => [str(u._id), u]))
     const carIds = [...new Set(rows.map((b) => str(b.car_id)))]
     const cars = await find(collections.cars, { _id: { $in: carIds.map(toId).filter(Boolean) } })
     const carById = new Map(cars.map((c) => [str(c._id), c]))
@@ -180,11 +201,10 @@ router.post('/bookings/lookup', async (req, res) => {
     // Strip internal admin_notes — public lookup must not leak them.
     const bookings = rows.map((b) => {
       const car = carById.get(str(b.car_id)) || {}
-      const u = userById.get(str(b.user_id)) || {}
       return {
         id: str(b._id),
-        user_id: str(b.user_id),
-        user_name: u.name || '',
+        user_name: b.user_name || '',
+        user_position: b.user_position || '',
         car_id: str(b.car_id),
         start_date: b.start_date,
         end_date: b.end_date,
@@ -196,6 +216,13 @@ router.post('/bookings/lookup', async (req, res) => {
         self_drive: !!b.self_drive,
         driver_name: b.driver_name || '',
         status: b.status,
+        doc_number: b.doc_number || null,
+        doc_label: b.doc_label || (b.doc_number ? String(b.doc_number) : null),
+        remaining_signers: remainingStages(b.signatures, b.paper_signers),
+        approval_stage: b.approval_stage || null,
+        signatures: publicSignatureProgress(b.signatures),
+        // Which stages are signed on paper — keys only, names stay private.
+        paper_signers: Object.fromEntries(Object.keys(b.paper_signers || {}).map((key) => [key, ''])),
         created_at: b.created_at,
         brand: car.brand || '',
         model: car.model || '',
@@ -203,7 +230,38 @@ router.post('/bookings/lookup', async (req, res) => {
       }
     })
 
-    res.json({ bookings, users: users.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
+    const names = [...new Set(rows.map((b) => b.user_name).filter(Boolean))]
+    res.json({ bookings, users: names.map((name) => ({ name })) })
+  } catch (err) {
+    sendError(res, err)
+  }
+})
+
+// Public document fetch for the tracking page. The PDF prints the borrower's
+// phone — the same credential that cancels/returns the booking — so it is
+// released only to someone who already knows that phone number. A name match
+// is NOT enough: the lookup matches name substrings, which anyone can guess.
+router.post('/bookings/:id/pdf', async (req, res) => {
+  try {
+    const { phone } = req.body || {}
+    if (!phone) {
+      return res.status(400).json({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
+    }
+
+    const id = toId(req.params.id)
+    const booking = id ? await findOne(collections.bookings, { _id: id }) : null
+    if (!booking || !booking.doc_number) return res.status(404).json({ error: 'ไม่พบเอกสาร' })
+
+    if (!booking.user_phone || normalizePhone(booking.user_phone) !== normalizePhone(phone)) {
+      return res.status(403).json({ error: 'เบอร์โทรศัพท์ไม่ตรงกับคำขอนี้' })
+    }
+
+    const car = await findOne(collections.cars, { _id: booking.car_id })
+    const pdfBytes = await renderBookingPdf(booking, car)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="booking-${booking.doc_number}.pdf"`)
+    res.send(Buffer.from(pdfBytes))
   } catch (err) {
     sendError(res, err)
   }
@@ -211,9 +269,9 @@ router.post('/bookings/lookup', async (req, res) => {
 
 router.post('/bookings/:id/return', async (req, res) => {
   try {
-    const { id_card } = req.body
-    if (!id_card) {
-      return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
+    const { phone } = req.body
+    if (!phone) {
+      return res.status(400).json({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
     }
 
     const id = toId(req.params.id)
@@ -224,13 +282,12 @@ router.post('/bookings/:id/return', async (req, res) => {
       return res.status(400).json({ error: 'เฉพาะรายการที่อนุมัติแล้วเท่านั้นที่สามารถคืนรถได้' })
     }
 
-    const user = await findOne(collections.users, { _id: booking.user_id })
-    if (!user || !user.id_card) {
-      return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
+    if (!booking.user_phone) {
+      return res.status(400).json({ error: 'ไม่พบข้อมูลเบอร์โทรศัพท์ของผู้ยืม' })
     }
 
-    if (normalizeIdCard(user.id_card) !== normalizeIdCard(id_card)) {
-      return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
+    if (normalizePhone(booking.user_phone) !== normalizePhone(phone)) {
+      return res.status(403).json({ error: 'เบอร์โทรศัพท์ไม่ถูกต้อง' })
     }
 
     const car = await findOne(collections.cars, { _id: booking.car_id })
@@ -254,7 +311,7 @@ router.post('/bookings/:id/return', async (req, res) => {
 
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     if (admins.length) {
-      const message = `🔁 ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) คืนรถเรียบร้อยแล้ว`
+      const message = `🔁 ${carText(car)} คืนรถเรียบร้อยแล้ว`
       await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
         message,
@@ -273,9 +330,9 @@ router.post('/bookings/:id/return', async (req, res) => {
 
 router.post('/bookings/:id/cancel', async (req, res) => {
   try {
-    const { id_card } = req.body
-    if (!id_card) {
-      return res.status(400).json({ error: 'กรุณากรอกเลขบัตรประชาชน' })
+    const { phone } = req.body
+    if (!phone) {
+      return res.status(400).json({ error: 'กรุณากรอกเบอร์โทรศัพท์' })
     }
 
     const id = toId(req.params.id)
@@ -286,13 +343,12 @@ router.post('/bookings/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'เฉพาะรายการที่รออนุมัติเท่านั้นที่สามารถยกเลิกได้' })
     }
 
-    const user = await findOne(collections.users, { _id: booking.user_id })
-    if (!user || !user.id_card) {
-      return res.status(400).json({ error: 'ไม่พบข้อมูลบัตรประชาชนของผู้ยืม' })
+    if (!booking.user_phone) {
+      return res.status(400).json({ error: 'ไม่พบข้อมูลเบอร์โทรศัพท์ของผู้ยืม' })
     }
 
-    if (normalizeIdCard(user.id_card) !== normalizeIdCard(id_card)) {
-      return res.status(403).json({ error: 'เลขบัตรประชาชนไม่ถูกต้อง' })
+    if (normalizePhone(booking.user_phone) !== normalizePhone(phone)) {
+      return res.status(403).json({ error: 'เบอร์โทรศัพท์ไม่ถูกต้อง' })
     }
 
     const car = await findOne(collections.cars, { _id: booking.car_id })
@@ -306,13 +362,13 @@ router.post('/bookings/:id/cancel', async (req, res) => {
 
     await updateMany(
       collections.notifications,
-      { related_type: 'booking', related_id: booking._id, type: 'booking_request' },
+      { related_type: 'booking', related_id: booking._id, type: { $in: ['booking_request', 'sign_request'] } },
       { $set: { is_read: true } }
     )
 
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     if (admins.length) {
-      const message = `❌ ${car ? car.brand : ''} ${car ? car.model : ''} (${car ? car.license_plate : ''}) ถูกยกเลิกโดยผู้ยืม`
+      const message = `❌ ${carText(car)} ถูกยกเลิกโดยผู้ยืม`
       await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
         message,
@@ -332,11 +388,21 @@ router.post('/bookings/:id/cancel', async (req, res) => {
 router.post('/bookings', async (req, res) => {
   try {
     const {
-      name, phone, car_id, start_date, end_date, purpose, user_id,
+      name, prefix, phone, position, car_id, start_date, end_date, purpose, signature,
       destination_place, destination_district, destination_province, attendees,
     } = req.body
-    if ((!user_id && !name) || !car_id || !start_date || !end_date) {
-      return res.status(400).json({ error: 'กรุณากรอกชื่อผู้ยืม เลือกรถ และวันที่' })
+    // Title (นาย/นาง/นางสาว) folded into the stored display name — see the
+    // matching comment in routes/bookings.cjs.
+    const borrowerName = joinNamePrefix(prefix, name)
+    const borrowerPhone = String(phone || '').trim()
+    const borrowerPosition = String(position || '').trim()
+    // The phone number doubles as the self-service cancel/return credential,
+    // so it has to exist for every booking, not just be nice-to-have.
+    if (!borrowerName || !borrowerPhone || !car_id || !start_date || !end_date) {
+      return res.status(400).json({ error: 'กรุณากรอกชื่อผู้ยืม เบอร์โทรศัพท์ เลือกรถ และวันที่' })
+    }
+    if (!isValidSignature(signature)) {
+      return res.status(400).json({ error: 'กรุณาเซ็นชื่อหรืออัปโหลดรูปลายเซ็นก่อนส่งคำขอยืม' })
     }
     if (!isValidDate(start_date) || !isValidDate(end_date)) {
       return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' })
@@ -344,6 +410,14 @@ router.post('/bookings', async (req, res) => {
     if (start_date > end_date) {
       return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
     }
+    const docSettings = await getDocSettings()
+    const ruleError = checkBookingRules(start_date, end_date, docSettings)
+    if (ruleError) return res.status(400).json({ error: ruleError })
+    // Stages signed on paper are frozen onto the document and skipped in the
+    // system chain (api/lib/signing.cjs).
+    const paperSigners = await resolvePaperSigners(docSettings)
+    const paperKeys = Object.keys(paperSigners)
+    const firstStage = currentStage({}, paperKeys)
 
     const carObjectId = toId(car_id)
 
@@ -364,34 +438,15 @@ router.post('/bookings', async (req, res) => {
         throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว')
       }
 
-      let borrower = null
-      if (user_id) {
-        const uid = toId(user_id)
-        borrower = uid ? await findOne(collections.users, { _id: uid }) : null
-      }
-      if (!borrower) {
-        borrower = phone
-          ? await findOne(collections.users, { name, phone })
-          : await findOne(collections.users, { name })
-      }
-
-      if (!borrower) {
-        const userId = await insertOne(collections.users, {
-          name,
-          email: await uniquePublicEmail(name),
-          password: '',
-          phone: phone || '',
-          id_card: req.body.id_card || '',
-          avatar: '',
-          role: 'user',
-          token_version: 0,
-          created_at: new Date(),
-        })
-        borrower = { _id: userId, name }
-      }
-
+      // The borrower is not a user account — their name/phone are stored
+      // directly on the booking, and nothing is written to the users
+      // collection for them.
+      const docNumber = await nextDocNumber()
       const bookingId = await insertOne(collections.bookings, {
-        user_id: borrower._id,
+        user_id: null,
+        user_name: borrowerName,
+        user_phone: borrowerPhone,
+        user_position: borrowerPosition,
         car_id: car._id,
         start_date,
         end_date,
@@ -405,17 +460,37 @@ router.post('/bookings', async (req, res) => {
         driver_name: '',
         status: 'pending',
         admin_notes: '',
+        // Document / signature chain — see api/lib/signing.cjs for the fixed
+        // five-stage order the staff roles sign in after the requester.
+        doc_number: docNumber,
+        doc_label: formatDocLabel(docNumber, docSettings),
+        approval_stage: firstStage,
+        paper_signers: paperSigners,
+        signatures: {
+          requester: {
+            name: borrowerName,
+            position: borrowerPosition,
+            image: signature,
+            signed_at: new Date(),
+          },
+        },
         created_at: new Date(),
         updated_at: new Date(),
       })
 
-      return { car, borrower, bookingId }
+      return { car, bookingId, docLabel: formatDocLabel(docNumber, docSettings) }
     })
 
-    const { car, borrower, bookingId } = result
+    const { car, bookingId, docLabel } = result
+    // The first in-system stages can sign straight away — tell their signers.
+    try {
+      await notifyStageSigners({ _id: bookingId, doc_label: docLabel, user_name: borrowerName }, stagesToNotify(firstStage, paperKeys), car)
+    } catch (err) {
+      console.error('[notify] new booking:', err && err.message)
+    }
     const admins = await find(collections.users, { role: 'admin' }, { projection: { _id: 1 } })
     if (admins.length) {
-      const notifMsg = `มีคำขอยืมรถใหม่: ${car.brand} ${car.model} (${car.license_plate})`
+      const notifMsg = `มีคำขอยืมรถใหม่: ${carText(car)}`
       await insertMany(collections.notifications, admins.map((a) => ({
         user_id: a._id,
         message: notifMsg,
@@ -430,9 +505,10 @@ router.post('/bookings', async (req, res) => {
     broadcastToRole('admin', 'data-changed', {
       action: 'new-booking',
       booking_id: str(bookingId),
-      user_name: (borrower && borrower.name) || name || 'ผู้ยืม',
+      user_name: borrowerName || 'ผู้ยืม',
       car_brand: car.brand,
       car_model: car.model,
+      car_label: carText(car),
     })
 
     res.status(201).json({ message: 'ส่งคำขอยืมเรียบร้อย' })

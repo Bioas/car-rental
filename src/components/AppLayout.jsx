@@ -10,7 +10,9 @@ export function AppLayout() {
   const { sidebarOpen, toggleSidebar, globalToast, setGlobalToast } = useApp()
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950 transition-colors duration-300">
+    // One flat background shared by the page, navbar and sidebar (like
+    // YouTube) so the shell reads as a single surface; cards sit on top of it.
+    <div className="min-h-screen flex bg-white dark:bg-surface-dark transition-colors duration-300">
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         <Navbar />

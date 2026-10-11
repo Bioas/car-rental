@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
-import { timeAgo } from '../lib/constants'
+import { timeAgo, roleLabel } from '../lib/constants'
 
 const NOTIF_TYPES = {
   approved: { label: 'อนุมัติแล้ว', icon: 'bxs-check-circle', color: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' },
@@ -15,7 +15,7 @@ function getNotifType(type) {
 }
 
 export function Navbar() {
-  const { toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, isAdmin, logout, authHeaders } = useApp()
+  const { toggleSidebar, darkMode, toggleDark, notificationCount, setNotificationCount, user, logout, authHeaders } = useApp()
   const navigate = useNavigate()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showNotifDropdown, setShowNotifDropdown] = useState(false)
@@ -98,9 +98,11 @@ export function Navbar() {
   }
 
   const initials = user?.name ? user.name.charAt(0).toUpperCase() : '?'
+  // Only staff sign documents, so only they keep a saved signature.
+  const canSign = user?.role === 'staff'
 
   return (
-    <header className="h-20 border-b border-border-light dark:border-border-dark bg-card-light/80 dark:bg-card-dark/80 backdrop-blur-md flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
+    <header className="h-20 bg-white dark:bg-surface-dark flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
       <div className="flex items-center gap-3">
         <button onClick={toggleSidebar} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 lg:hidden transition-colors">
           <i className="bx bx-menu text-xl"></i>
@@ -230,14 +232,32 @@ export function Navbar() {
               <div className="px-4 py-3">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white font-heading">{user?.name}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{user?.email}</p>
-                {isAdmin && (
+                {user?.role && (
                   <span className="inline-block mt-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-brand-50 text-brand-600 dark:bg-brand-900/40 dark:text-brand-300">
-                    ผู้ดูแลระบบ
+                    {roleLabel(user.role)}
                   </span>
                 )}
               </div>
               <div className="border-t border-border-light dark:border-border-dark" />
               <div className="p-1">
+                <Link
+                  to="/app/profile"
+                  onClick={() => setShowDropdown(false)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <i className="bx bx-user-circle text-base"></i>
+                  โปรไฟล์ของฉัน
+                </Link>
+                {canSign && (
+                  <Link
+                    to="/app/profile#signature"
+                    onClick={() => setShowDropdown(false)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                  >
+                    <i className="bx bx-pen text-base"></i>
+                    ลายเซ็นของฉัน
+                  </Link>
+                )}
                 <button
                   onClick={logout}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"

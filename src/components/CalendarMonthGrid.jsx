@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { STATUS_COLORS } from '../lib/constants'
+import { STATUS_COLORS, effectiveStatus, signStatus } from '../lib/constants'
 
 // Same-hue PALER/lighter text colors for the trailing status chip on
 // multi-day bars. Each is 3 Tailwind shades LIGHTER than the chip bg
@@ -37,6 +37,19 @@ const _warnedChipStatuses = new Set()
 // back to the data layer. Uses `import.meta.env.DEV` (Vite-native, replaced
 // at build time) instead of `process.env.NODE_ENV !== 'production'` so
 // Vite tree-shakes the warning branch out of production bundles.
+// Bar text: "ทะเบียน · ผู้จอง" — the plate tells cars of the same model apart.
+// The tooltip / aria-label keep the brand and model as extra context.
+function carPlate(b) {
+  return b.license_plate || `${b.brand || ''} ${b.model || ''}`.trim()
+}
+function barLabel(b) {
+  return `${carPlate(b)} · ${b.user_name}`
+}
+function barTitle(b) {
+  const car = [b.brand, b.model].filter(Boolean).join(' ')
+  return b.license_plate && car ? `${b.license_plate} (${car}) · ${b.user_name}` : barLabel(b)
+}
+
 function chipTextColor(status, fallback, booking) {
   const mapped = STATUS_TEXT_COLORS[status]
   if (mapped) return mapped
@@ -47,7 +60,7 @@ function chipTextColor(status, fallback, booking) {
       {
         status,
         bookingId: booking?.id,
-        userId: booking?.user_id,
+        userName: booking?.user_name,
         brand: booking?.brand,
         model: booking?.model,
         start: booking?.start_date,
@@ -121,7 +134,6 @@ export function CalendarMonthGrid({
   viewDate,
   rawBookings,
   bookingBarColor,
-  statusLabel,
   onCellClick,
   onBarClick,
 }) {
@@ -239,10 +251,10 @@ export function CalendarMonthGrid({
                 <div
                   key={day.dateStr}
                   onClick={() => onCellClick && onCellClick(day.dateStr, null)}
-                  className={`cal-month-day relative border-r border-neutral-100/50 dark:border-gray-700/40 last:border-r-0 cursor-pointer transition-colors ${
+                  className={`cal-month-day relative border-r border-neutral-100/50 dark:border-gray-700/40 last:border-r-0 transition-colors ${onCellClick ? 'cursor-pointer' : ''} ${
                     day.isOutOfMonth
                       ? 'opacity-30 hover:bg-transparent pointer-events-none'
-                      : 'hover:bg-brand-50/50 dark:hover:bg-brand-950/30'
+                      : onCellClick ? 'hover:bg-brand-50/50 dark:hover:bg-brand-950/30' : ''
                   } ${day.isToday ? 'bg-brand-50/60 dark:bg-brand-950/40' : ''}`}
                   aria-label={
                     day.isOutOfMonth
@@ -288,7 +300,13 @@ export function CalendarMonthGrid({
                   continuous strip. */}
               <div className="cal-month-bars-layer absolute inset-0 pointer-events-none">
                 {bars.map((b, bi) => {
-                  const bgColor = bookingBarColor(b.status, b.user_id)
+                  // Derive the *shown* status: an admin-approved booking whose
+                  // signature chain is still incomplete must read "รอดำเนินการ"
+                  // (amber / 'pending'), never "อนุมัติแล้ว" (green / 'approved').
+                  // Same rule the admin list + document popup use.
+                  const status = effectiveStatus(b)
+                  const statusText = signStatus(b).label
+                  const bgColor = bookingBarColor(status, b.user_name)
                   // Fixed FC-style dimensions: bar sits below the date number
                   // zone, leaves ~10px empty at the bottom of the row for
                   // visual breathing room, and stacks vertically into tracks.
@@ -318,7 +336,7 @@ export function CalendarMonthGrid({
                   // glow are still kept for chip polish (depth + legibility
                   // against any per-user background that drifts close to
                   // a status hue).
-                  const statusColor = STATUS_COLORS[b.status] || '#6b7280'
+                  const statusColor = STATUS_COLORS[status] || '#6b7280'
                   // BOOKING-LEVEL MULTI-DAY FLAG (cross-row aware). True iff
                   // the booking's start and end dates differ — drives the
                   // label-overflow behavior on the start-segment bar (see
@@ -424,7 +442,7 @@ export function CalendarMonthGrid({
                           : {
                               role: 'button',
                               tabIndex: 0,
-                              'aria-label': `${b.brand} ${b.model} - ${b.user_name} - ${statusLabel(b.status)}`,
+                              'aria-label': `${barTitle(b)} - ${statusText}`,
                             })}
                         style={{
                           left: `calc(${(col / 7) * 100}% + ${leftGap}px)`,
@@ -567,7 +585,7 @@ export function CalendarMonthGrid({
                                   boxShadow:
                                     '0 0 8px 0 ' + statusColor,
                                 }}
-                                title={statusLabel(b.status)}
+                                title={statusText}
                               />
                             )}
                             {/* LABEL — renders ONLY on the first segment of
@@ -584,9 +602,9 @@ export function CalendarMonthGrid({
                             {isBookingStart && !isMultiDayBooking && (
                               <span
                                 className="cal-month-bar-label cal-bar-label min-w-0 truncate text-[10px] sm:text-[11px] font-medium text-white leading-tight flex-1"
-                                title={`${b.brand} ${b.model} · ${b.user_name}`}
+                                title={barTitle(b)}
                               >
-                                {`${b.brand} ${b.model} · ${b.user_name}`}
+                                {barLabel(b)}
                               </span>
                             )}
                             {/* TRAILING STATUS BADGE — single per booking,
@@ -682,7 +700,7 @@ export function CalendarMonthGrid({
                                   // chipTextColor() helper handles mapping +
                                   // dev-only deduped warning on unknown
                                   // statuses — see top of file.
-                                  color: chipTextColor(b.status, statusColor, b),
+                                  color: chipTextColor(status, statusColor, b),
                                   boxShadow:
                                     '0 0 8px 0 ' + statusColor,
                                   // 2-layer dark shadow (no white halo
@@ -700,11 +718,11 @@ export function CalendarMonthGrid({
                                 }}
                                 title={
                                   isBookingStart
-                                    ? `สถานะ: ${statusLabel(b.status)}`
-                                    : `ถึงวันที่ ${b.end_date} • สถานะ: ${statusLabel(b.status)}`
+                                    ? `สถานะ: ${statusText}`
+                                    : `ถึงวันที่ ${b.end_date} • สถานะ: ${statusText}`
                                 }
                               >
-                                {statusLabel(b.status)}
+                                {statusText}
                               </span>
                             )}
                           </div>
@@ -742,7 +760,7 @@ export function CalendarMonthGrid({
                         key={b.id + '_r' + rowIdx + '_extlabel'}
                         role="button"
                         tabIndex={0}
-                        aria-label={`${b.brand} ${b.model} - ${b.user_name} - ${statusLabel(b.status)}`}
+                        aria-label={`${barTitle(b)} - ${statusText}`}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
@@ -791,9 +809,9 @@ export function CalendarMonthGrid({
                           zIndex: b.track + 10,
                           textShadow: '0 1px 2px rgba(0,0,0,0.55)',
                         }}
-                        title={`${b.brand} ${b.model} · ${b.user_name}`}
+                        title={barTitle(b)}
                       >
-                        {`${b.brand} ${b.model} · ${b.user_name}`}
+                        {barLabel(b)}
                       </div>
                     )
                   }

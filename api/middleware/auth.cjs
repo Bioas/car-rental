@@ -94,11 +94,24 @@ async function authMiddleware(req, res, next) {
   next()
 }
 
+// 'staff' accounts were given full admin-equivalent access by design — the
+// only account that still can't reach these routes is 'driver', which never
+// logs in at all (it's an assignment roster entry, not a sign-in account).
 function adminMiddleware(req, res, next) {
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== 'admin' && req.user.role !== 'staff') {
     return res.status(403).json({ error: 'Forbidden: Admins only' })
   }
   next()
 }
 
-module.exports = { generateToken, verifyToken, authMiddleware, adminMiddleware, resolveTokenUser, JWT_SECRET }
+// Managing loan requests — approve/reject/return, and creating one from the
+// back office — is staff-only. An admin oversees the system (cars, users,
+// stage assignments) but is a read-only viewer of loan requests.
+function bookingManagerMiddleware(req, res, next) {
+  if (req.user.role !== 'staff') {
+    return res.status(403).json({ error: 'เฉพาะเจ้าหน้าที่เท่านั้นที่จัดการคำขอยืมได้ ผู้ดูแลระบบดูได้อย่างเดียว' })
+  }
+  next()
+}
+
+module.exports = { generateToken, verifyToken, authMiddleware, adminMiddleware, bookingManagerMiddleware, resolveTokenUser, JWT_SECRET }

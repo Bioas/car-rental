@@ -2,13 +2,14 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
-export function SidebarLink({ to, label, collapsed, admin, badge, onClick, children }) {
+export function SidebarLink({ to, label, collapsed, admin, badge, matchPrefix, onClick, children }) {
   const { isAdmin } = useApp()
   const location = useLocation()
 
   if (admin && !isAdmin) return null
 
-  const isActive = location.pathname === to
+  // matchPrefix keeps a section link (e.g. ตั้งค่า) active on its sub-pages.
+  const isActive = location.pathname === to || (matchPrefix && location.pathname.startsWith(`${to}/`))
 
   return (
     <Link

@@ -22,3 +22,4 @@ server.log
 *.tmp
 _test_*
 nul
+.mongo-data/
