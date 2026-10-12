@@ -280,7 +280,7 @@ export default function SignaturePad({ value, onChange }) {
               ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-900/30 dark:text-brand-300'
               : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
           }`}>
-          <i className="bx bx-pencil text-base"></i>
+          <i aria-hidden="true" className="bx bx-pencil text-base"></i>
           วาดลายเซ็น
         </button>
         <button type="button" onClick={() => switchMode('upload')}
@@ -289,7 +289,7 @@ export default function SignaturePad({ value, onChange }) {
               ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-900/30 dark:text-brand-300'
               : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
           }`}>
-          <i className="bx bx-upload text-base"></i>
+          <i aria-hidden="true" className="bx bx-upload text-base"></i>
           อัปโหลดรูป
         </button>
       </div>
@@ -317,14 +317,14 @@ export default function SignaturePad({ value, onChange }) {
           </div>
           <div className="flex items-center justify-between mt-2 gap-3">
             <p className="text-xs text-gray-400">ลงลายมือชื่อด้วยนิ้ว ปากกา หรือเมาส์ในกรอบด้านบน</p>
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               <button type="button" onClick={undoStroke} disabled={strokeCount === 0}
-                className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1">
-                <i className="bx bx-undo text-sm"></i> ย้อนกลับ
+                className="h-9 px-2 -mx-1 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-gray-100 dark:hover:bg-gray-700/60 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1">
+                <i aria-hidden="true" className="bx bx-undo text-sm"></i> ย้อนกลับ
               </button>
               <button type="button" onClick={clearCanvas} disabled={strokeCount === 0}
-                className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1">
-                <i className="bx bx-eraser text-sm"></i> ล้าง
+                className="h-9 px-2 -mx-1 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700/60 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1">
+                <i aria-hidden="true" className="bx bx-eraser text-sm"></i> ล้าง
               </button>
             </div>
           </div>
@@ -334,15 +334,15 @@ export default function SignaturePad({ value, onChange }) {
           {value ? (
             <div className="relative">
               <img src={value} alt="ลายเซ็นที่อัปโหลด" className="w-full h-48 object-contain rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white" />
-              <button type="button" onClick={() => onChange('')}
+              <button type="button" onClick={() => onChange('')} aria-label="ลบลายเซ็นที่อัปโหลด"
                 className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80">
-                <i className="bx bx-x text-base"></i>
+                <i aria-hidden="true" className="bx bx-x text-base"></i>
               </button>
             </div>
           ) : (
             <button type="button" onClick={() => fileInputRef.current && fileInputRef.current.click()}
               className="w-full h-48 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-brand-400 hover:text-brand-500 transition-colors">
-              <i className="bx bx-image-add text-3xl"></i>
+              <i aria-hidden="true" className="bx bx-image-add text-3xl"></i>
               <span className="text-sm">แตะเพื่อเลือกรูปลายเซ็น</span>
             </button>
           )}

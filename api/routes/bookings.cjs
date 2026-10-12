@@ -10,6 +10,7 @@ const { renderBookingPdf } = require('../lib/pdf.cjs')
 const { getDocSettings, formatDocLabel, checkBookingRules } = require('../lib/doc-settings.cjs')
 const { carText, notifyStageSigners } = require('../lib/notify.cjs')
 const { joinNamePrefix } = require('../lib/names.cjs')
+const { parseBookingTimes, findClash } = require('../lib/booking-time.cjs')
 
 const router = Router()
 
@@ -18,24 +19,10 @@ function isValidSignature(value) {
   return typeof value === 'string' && value.startsWith('data:image/') && value.length <= MAX_SIGNATURE_LENGTH
 }
 
-/**
- * Find a booking for the same car whose range overlaps [start_date, end_date].
- * Ranges are stored as plain `YYYY-MM-DD` strings, which compare correctly.
- */
-function overlapFilter(carId, start_date, end_date, extra = {}) {
-  return {
-    car_id: carId,
-    status: { $in: ['approved', 'pending'] },
-    start_date: { $lte: end_date },
-    end_date: { $gte: start_date },
-    ...extra,
-  }
-}
-
 router.post('/', authMiddleware, bookingManagerMiddleware, async (req, res) => {
   try {
     const {
-      car_id, start_date, end_date, purpose, name, prefix, phone, position, signature,
+      car_id, start_date, end_date, start_time, end_time, purpose, name, prefix, phone, position, signature,
       destination_place, destination_district, destination_province, attendees,
     } = req.body
     // The title (นาย/นาง/นางสาว) is folded into the stored display name so
@@ -63,6 +50,8 @@ router.post('/', authMiddleware, bookingManagerMiddleware, async (req, res) => {
     if (start_date > end_date) {
       return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
     }
+    const times = parseBookingTimes({ start_date, end_date, start_time, end_time })
+    if (times.error) return res.status(400).json({ error: times.error })
     const docSettings = await getDocSettings()
     const ruleError = checkBookingRules(start_date, end_date, docSettings)
     if (ruleError) return res.status(400).json({ error: ruleError })
@@ -84,9 +73,9 @@ router.post('/', authMiddleware, bookingManagerMiddleware, async (req, res) => {
         throw httpError(400, 'รถยนต์นี้ไม่พร้อมให้เช่า')
       }
 
-      const overlap = await findOne(collections.bookings, overlapFilter(car._id, start_date, end_date))
+      const overlap = await findClash(car._id, { start_date, end_date, ...times })
       if (overlap) {
-        throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว')
+        throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันและเวลาที่เลือกแล้ว')
       }
 
       const docNumber = await nextDocNumber()
@@ -101,6 +90,8 @@ router.post('/', authMiddleware, bookingManagerMiddleware, async (req, res) => {
         car_id: car._id,
         start_date,
         end_date,
+        start_time: times.start_time,
+        end_time: times.end_time,
         purpose: purpose || '',
         destination_place: destination_place || '',
         destination_district: destination_district || '',
@@ -170,6 +161,8 @@ router.post('/', authMiddleware, bookingManagerMiddleware, async (req, res) => {
         car_id: str(booking.car_id),
         start_date: booking.start_date,
         end_date: booking.end_date,
+        start_time: booking.start_time || '',
+        end_time: booking.end_time || '',
         purpose: booking.purpose || '',
         destination_place: booking.destination_place || '',
         destination_district: booking.destination_district || '',
@@ -211,6 +204,8 @@ router.get('/calendar', authMiddleware, async (req, res) => {
           car_id: str(b.car_id),
           start_date: b.start_date,
           end_date: b.end_date,
+          start_time: b.start_time || '',
+          end_time: b.end_time || '',
           purpose: b.purpose || '',
           destination_place: b.destination_place || '',
           destination_district: b.destination_district || '',

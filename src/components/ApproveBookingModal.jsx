@@ -1,21 +1,64 @@
-import React, { useState } from 'react'
-import { Select } from './ui/select'
+import React, { useEffect, useRef, useState } from 'react'
+import { useApp } from '../context/AppContext'
+import DriverSelect from './DriverSelect'
+import { useDialog, dialogProps } from '../lib/useDialog'
 
 /**
  * Approval dialog shown when an admin approves a pending booking.
  *
  * The admin must decide who drives: either assign one of the driver-role users
  * ("ส่งพนักงานขับรถ") or let the requester drive themselves ("ให้ผู้ยืมขับเอง").
- * The choice is sent to PUT /api/admin/bookings/:id/approve.
+ * The choice is sent to PUT /api/admin/bookings/:id/approve. Drivers already
+ * on a trip that overlaps this booking's time are shown but can't be picked.
  */
 export default function ApproveBookingModal({ booking, drivers = [], onClose, onConfirm, saving = false }) {
   const [mode, setMode] = useState('self')
   const [driverId, setDriverId] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState({})
+  const [load, setLoad] = useState(null)
+  // The suggestion is tied to the booking it was computed for, so a stale one
+  // from the previously opened booking is never pre-selected.
+  const [recommended, setRecommended] = useState({ bookingId: null, id: null })
+  const { authHeaders } = useApp()
+
+  useEffect(() => {
+    if (!booking?.id) return
+    let cancelled = false
+    // A new booking starts from a clean choice.
+    setMode('self')
+    setDriverId('')
+    setError('')
+    setBusy({})
+    setLoad(null)
+    setRecommended({ bookingId: null, id: null })
+    fetch(`/api/admin/bookings/${encodeURIComponent(booking.id)}/driver-conflicts`, { headers: authHeaders() })
+      .then(res => (res.ok ? res.json() : {}))
+      .then(data => {
+        if (cancelled) return
+        setBusy(data.busy || {})
+        setLoad(data.load || null)
+        setRecommended({ bookingId: booking.id, id: data.recommended_id || null })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booking?.id])
+
+  // Choosing "ส่งพนักงานขับรถไป" starts on the suggested driver.
+  const recommendedId = recommended.bookingId === booking?.id ? recommended.id : null
+  useEffect(() => {
+    if (mode === 'driver' && !driverId && recommendedId) setDriverId(recommendedId)
+  }, [mode, driverId, recommendedId])
+
+  const panelRef = useRef(null)
+  useDialog(!!booking, () => !saving && onClose(), panelRef)
 
   if (!booking) return null
 
-  const canConfirm = mode === 'self' || !!driverId
+  const roster = drivers.map(d => ({ ...d, busy: busy[d.id] || null, ...(load ? { week_trips: load[d.id] || 0 } : {}) }))
+  const driverBusy = mode === 'driver' && !!busy[driverId]
+  const canConfirm = mode === 'self' || (!!driverId && !driverBusy)
 
   function confirm() {
     if (mode === 'driver' && !driverId) {
@@ -28,25 +71,25 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !saving && onClose()}>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="card p-6 w-full max-w-md relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} {...dialogProps('อนุมัติคำขอยืม')} className="card p-6 w-full max-w-md relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm shrink-0 bg-gradient-to-br from-emerald-400 to-emerald-600">
-              <i className="bx bx-check-shield text-xl"></i>
+              <i aria-hidden="true" className="bx bx-check-shield text-xl"></i>
             </div>
             <div>
               <h3 className="font-heading font-semibold text-base text-gray-900 dark:text-white">อนุมัติคำขอยืมรถ</h3>
               <p className="text-xs text-neutral-500">เลือกผู้ขับขี่สำหรับการยืมครั้งนี้</p>
             </div>
           </div>
-          <button onClick={onClose} disabled={saving}
+          <button aria-label="ปิด" onClick={onClose} disabled={saving}
             className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-400 transition-colors disabled:opacity-50">
-            <i className="bx bx-x text-xl"></i>
+            <i className="bx bx-x text-xl" aria-hidden="true"></i>
           </button>
         </div>
 
         <div className="mb-4 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2">
-          <i className="bx bx-car text-sm"></i>
+          <i aria-hidden="true" className="bx bx-car text-sm"></i>
           <span className="font-medium text-gray-700 dark:text-gray-300">{booking.license_plate}</span>
           <span className="text-gray-400">·</span>
           <span>{booking.brand} {booking.model}</span>
@@ -69,13 +112,13 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
               mode === 'self' ? 'bg-brand-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
             }`}>
-              <i className="bx bx-user text-lg"></i>
+              <i aria-hidden="true" className="bx bx-user text-lg"></i>
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-gray-900 dark:text-white">ให้ผู้ยืมขับเอง</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">อนุมัติให้ผู้ขอยืมเป็นผู้ขับขี่เอง</div>
             </div>
-            {mode === 'self' && <i className="bx bxs-check-circle text-lg text-brand-500 shrink-0"></i>}
+            {mode === 'self' && <i aria-hidden="true" className="bx bxs-check-circle text-lg text-brand-500 shrink-0"></i>}
           </button>
 
           {/* Assign driver */}
@@ -88,24 +131,22 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
               mode === 'driver' ? 'bg-sky-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
             }`}>
-              <i className="bx bx-car text-lg"></i>
+              <i aria-hidden="true" className="bx bx-car text-lg"></i>
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-gray-900 dark:text-white">ส่งพนักงานขับรถไป</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">มอบหมายพนักงานขับรถให้การยืมครั้งนี้</div>
             </div>
-            {mode === 'driver' && <i className="bx bxs-check-circle text-lg text-sky-500 shrink-0"></i>}
+            {mode === 'driver' && <i aria-hidden="true" className="bx bxs-check-circle text-lg text-sky-500 shrink-0"></i>}
           </button>
 
           {mode === 'driver' && (
             <div className="pt-1 animate-fade-in">
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">เลือกพนักงานขับรถ</label>
-              <Select value={driverId} onChange={v => { setDriverId(v); setError('') }}
-                icon="bx-user-pin" placeholder="— เลือกพนักงานขับรถ —"
-                options={drivers.map(d => ({ value: d.id, label: d.phone ? `${d.name} (${d.phone})` : d.name }))} />
+              <DriverSelect drivers={roster} recommendedId={recommendedId} value={driverId} onChange={v => { setDriverId(v); setError('') }} />
               {drivers.length === 0 && (
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                  <i className="bx bx-info-circle text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-info-circle text-sm"></i>
                   ยังไม่มีพนักงานขับรถในระบบ — เพิ่มได้ที่เมนู "ผู้ใช้"
                 </p>
               )}
@@ -115,7 +156,7 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
 
         {error && (
           <div className="mt-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2">
-            <i className="bx bx-error-circle text-base shrink-0"></i>
+            <i aria-hidden="true" className="bx bx-error-circle text-base shrink-0"></i>
             {error}
           </div>
         )}
@@ -123,11 +164,11 @@ export default function ApproveBookingModal({ booking, drivers = [], onClose, on
         <div className="flex gap-3 pt-5">
           <button type="button" onClick={confirm} disabled={saving || !canConfirm}
             className="flex-1 h-11 inline-flex items-center justify-center gap-2 px-5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 active:from-emerald-600 active:to-emerald-700 shadow-md shadow-emerald-200/50 hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving ? <i className="bx bx-loader-alt text-base animate-spin"></i> : <i className="bx bx-check text-base"></i>}
+            {saving ? <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i> : <i aria-hidden="true" className="bx bx-check text-base"></i>}
             <span>{saving ? 'กำลังอนุมัติ...' : 'ยืนยันอนุมัติ'}</span>
           </button>
           <button type="button" onClick={onClose} disabled={saving}
-            className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-400 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 disabled:opacity-50">
+            className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-200 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 disabled:opacity-50">
             ยกเลิก
           </button>
         </div>

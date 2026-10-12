@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
-import { todayStr } from '../lib/constants'
+import { todayStr, DEFAULT_START_TIME, DEFAULT_END_TIME } from '../lib/constants'
 import { apiGet, invalidateApi } from '../lib/apiCache'
 import RangeDatePicker from './RangeDatePicker'
+import TimeRangePicker from './TimeRangePicker'
 import PrefixSelect from './PrefixSelect'
+import { useDialog, dialogProps } from '../lib/useDialog'
 
 // Red invalid styling applied to a required field after a failed submit,
 // overriding the normal border + focus ring (Tailwind `!` importance).
@@ -42,12 +44,12 @@ function CarSelect({ value, onChange, options }) {
         ) : (
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-neutral-100 dark:bg-gray-700 flex items-center justify-center text-neutral-400">
-              <i className="bx bx-car text-sm"></i>
+              <i aria-hidden="true" className="bx bx-car text-sm"></i>
             </div>
             <span>— เลือกรถ —</span>
           </div>
         )}
-        <i className={`bx bx-chevron-down text-base text-neutral-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
+        <i aria-hidden="true" className={`bx bx-chevron-down text-base text-neutral-400 shrink-0 ml-2 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
 
       {open && (
@@ -71,7 +73,7 @@ function CarSelect({ value, onChange, options }) {
                   <div className="text-[10px] text-neutral-400 dark:text-gray-500 leading-tight">{c.brand} {c.model} · {c.seats} ที่นั่ง</div>
                 </div>
                 {c.id === value && (
-                  <i className="bx bx-check text-base text-brand-500 shrink-0"></i>
+                  <i aria-hidden="true" className="bx bx-check text-base text-brand-500 shrink-0"></i>
                 )}
               </button>
             ))}
@@ -88,7 +90,7 @@ function CarSelect({ value, onChange, options }) {
 export function BookingModal({ open, onClose, initialCarId, initialDate }) {
   const { authHeaders } = useApp()
   const [availableCars, setAvailableCars] = useState([])
-  const [form, setForm] = useState({ prefix: '', name: '', phone: '', position: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
+  const [form, setForm] = useState({ prefix: '', name: '', phone: '', position: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
   // Which required fields were empty the last time the user pressed submit —
   // drives the red invalid styling, and clears as soon as a field is filled.
   const [formErrors, setFormErrors] = useState({})
@@ -99,7 +101,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
 
   useEffect(() => {
     if (open) {
-      setForm({ prefix: '', name: '', phone: '', position: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
+      setForm({ prefix: '', name: '', phone: '', position: '', car_id: initialCarId || '', start_date: initialDate || '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, purpose: '', destination_place: '', destination_district: '', destination_province: '', attendees: '' })
       setError('')
       setSuccess('')
       fetchCars()
@@ -203,24 +205,27 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
     }
   }
 
+  const panelRef = useRef(null)
+  useDialog(open, onClose, panelRef)
+
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} {...dialogProps('สร้างคำขอยืม')} className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-neutral-100 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-white shadow-sm">
-              <i className="bx bx-plus text-xl"></i>
+              <i aria-hidden="true" className="bx bx-plus text-xl"></i>
             </div>
             <div>
               <h3 className="font-heading font-semibold text-base text-neutral-800 dark:text-white">จองรถ</h3>
               <p className="text-xs text-neutral-400">กรอกข้อมูลเพื่อส่งคำขอยืม</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-400 transition-colors">
-            <i className="bx bx-x text-xl"></i>
+          <button onClick={onClose} aria-label="ปิด" className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-400 transition-colors">
+            <i aria-hidden="true" className="bx bx-x text-xl"></i>
           </button>
         </div>
 
@@ -231,7 +236,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
               <PrefixSelect value={form.prefix} onChange={v => updateForm('prefix', v)}
                 buttonClassName={`h-11 w-32 px-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.prefix ? INVALID_FIELD : ''}`} />
               <div className="relative flex-1 min-w-0">
-                <i className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.name} onChange={e => updateForm('name', e.target.value)}
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.name ? INVALID_FIELD : ''}`}
                   placeholder="ชื่อ-นามสกุล" required />
@@ -242,7 +247,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">เบอร์โทรศัพท์</label>
               <div className="relative">
-                <i className="bx bx-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.phone} onChange={e => updateForm('phone', e.target.value)} type="tel"
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.phone ? INVALID_FIELD : ''}`}
                   placeholder="เบอร์โทรศัพท์" required />
@@ -251,7 +256,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ตำแหน่ง</label>
               <div className="relative">
-                <i className="bx bx-briefcase absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-briefcase absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.position} onChange={e => updateForm('position', e.target.value)}
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.position ? INVALID_FIELD : ''}`}
                   placeholder="เช่น ครู, เจ้าหน้าที่" />
@@ -266,7 +271,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ช่วงวันที่ใช้งาน</label>
+            <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ช่วงวันและเวลาที่ใช้งาน</label>
             {/* RangeDatePicker (vehicle-tab style) replaces the prior
                 2-half-bar DateRangeBar. Trigger button shows
                 start→end (X วัน) summary + opens step='start'/'end'
@@ -281,6 +286,11 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
                 onChange={(s, e) => { updateForm('start_date', s); updateForm('end_date', e) }}
                 min={today} />
             </div>
+            <div className="mt-3">
+              <TimeRangePicker startTime={form.start_time} endTime={form.end_time}
+                sameDay={!!form.start_date && form.start_date === form.end_date}
+                onChange={(start_time, end_time) => setForm(prev => ({ ...prev, start_time, end_time }))} />
+            </div>
           </div>
 
           {/* Trip details — 2×2 grid so all four short fields share one width
@@ -289,7 +299,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่อสถานที่</label>
               <div className="relative">
-                <i className="bx bx-map-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-map-pin absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.destination_place} onChange={e => updateForm('destination_place', e.target.value)}
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.destination_place ? INVALID_FIELD : ''}`}
                   placeholder="ชื่อสถานที่" />
@@ -298,7 +308,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่ออำเภอ</label>
               <div className="relative">
-                <i className="bx bx-buildings absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-buildings absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.destination_district} onChange={e => updateForm('destination_district', e.target.value)}
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.destination_district ? INVALID_FIELD : ''}`}
                   placeholder="ชื่ออำเภอ" />
@@ -307,7 +317,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">ชื่อจังหวัด</label>
               <div className="relative">
-                <i className="bx bx-map absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-map absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.destination_province} onChange={e => updateForm('destination_province', e.target.value)}
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.destination_province ? INVALID_FIELD : ''}`}
                   placeholder="ชื่อจังหวัด" />
@@ -316,7 +326,7 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <div>
               <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5 truncate">จำนวนผู้ไปราชการ</label>
               <div className="relative">
-                <i className="bx bx-group absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                <i aria-hidden="true" className="bx bx-group absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                 <input value={form.attendees} onChange={e => updateForm('attendees', e.target.value)} type="number" min="1"
                   className={`w-full h-11 pl-10 pr-3 rounded-xl border bg-white dark:bg-gray-800 border-neutral-200 dark:border-gray-600 text-sm text-neutral-800 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all ${formErrors.attendees ? INVALID_FIELD : ''}`}
                   placeholder="จำนวนคน" />
@@ -334,14 +344,14 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
 
           {error && (
             <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2">
-              <i className="bx bx-error-circle text-base shrink-0"></i>
+              <i aria-hidden="true" className="bx bx-error-circle text-base shrink-0"></i>
               {error}
             </div>
           )}
 
           {success && (
             <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
-              <i className="bx bx-check-circle text-base shrink-0"></i>
+              <i aria-hidden="true" className="bx bx-check-circle text-base shrink-0"></i>
               {success}
             </div>
           )}
@@ -350,12 +360,12 @@ export function BookingModal({ open, onClose, initialCarId, initialDate }) {
             <button type="submit" disabled={loading}
               className="flex-1 h-11 inline-flex items-center justify-center gap-2 px-5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 active:from-brand-600 active:to-brand-700 shadow-md shadow-brand-200/50 hover:shadow-lg hover:shadow-brand-300/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
               {loading && (
-                <i className="bx bx-loader-alt text-base animate-spin"></i>
+                <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i>
               )}
               <span>{loading ? 'กำลังส่ง...' : 'ส่งคำขอยืม'}</span>
             </button>
             <button type="button" onClick={onClose}
-              className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-400 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-neutral-300">
+              className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-200 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-neutral-300">
               ยกเลิก
             </button>
           </div>

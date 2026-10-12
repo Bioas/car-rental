@@ -21,6 +21,14 @@ export function Navbar() {
   const [showNotifDropdown, setShowNotifDropdown] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [darkAnimating, setDarkAnimating] = useState(false)
+  // Blends into the page background at the top; frosted once content scrolls under it.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   const dropdownRef = useRef(null)
   const notifDropdownRef = useRef(null)
 
@@ -97,15 +105,14 @@ export function Navbar() {
     }
   }
 
-  const initials = user?.name ? user.name.charAt(0).toUpperCase() : '?'
   // Only staff sign documents, so only they keep a saved signature.
   const canSign = user?.role === 'staff'
 
   return (
-    <header className="h-20 bg-white dark:bg-surface-dark flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20">
+    <header className={`h-20 transition-[background-color,box-shadow] duration-200 ${scrolled ? 'bg-white/75 dark:bg-gray-950/70 backdrop-blur-xl shadow-[0_1px_0_rgba(0,0,0,0.04)]' : 'bg-transparent'} flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-20`}>
       <div className="flex items-center gap-3">
         <button onClick={toggleSidebar} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 lg:hidden transition-colors">
-          <i className="bx bx-menu text-xl"></i>
+          <i aria-hidden="true" className="bx bx-menu text-xl"></i>
         </button>
       </div>
 
@@ -118,9 +125,9 @@ export function Navbar() {
         >
           <div className={`transition-transform duration-300 ease-out ${darkAnimating ? 'rotate-180 scale-75' : 'rotate-0 scale-100'}`}>
             {darkMode ? (
-              <i className="bx bx-sun text-xl"></i>
+              <i aria-hidden="true" className="bx bx-sun text-xl"></i>
             ) : (
-              <i className="bx bx-moon text-xl"></i>
+              <i aria-hidden="true" className="bx bx-moon text-xl"></i>
             )}
           </div>
         </button>
@@ -134,7 +141,7 @@ export function Navbar() {
             }}
             className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
           >
-            <i className="bx bx-bell text-xl"></i>
+            <i aria-hidden="true" className="bx bx-bell text-xl"></i>
             {notificationCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 ring-2 ring-white dark:ring-card-dark">
                 {notificationCount > 99 ? '99+' : notificationCount}
@@ -176,7 +183,7 @@ export function Navbar() {
                           }`}
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${t.color}`}>
-                          <i className={`bx ${t.icon} text-base`}></i>
+                          <i aria-hidden="true" className={`bx ${t.icon} text-base`}></i>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-0.5">
@@ -199,7 +206,7 @@ export function Navbar() {
                   })
                 ) : (
                   <div className="text-center py-10 text-gray-400">
-                    <i className="bx bx-bell text-4xl mx-auto mb-2 opacity-40 block"></i>
+                    <i aria-hidden="true" className="bx bx-bell text-4xl mx-auto mb-2 opacity-40 block"></i>
                     <p className="text-sm">ไม่มีการแจ้งเตือน</p>
                   </div>
                 )}
@@ -219,10 +226,13 @@ export function Navbar() {
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowDropdown(!showDropdown)}
+            aria-label={`เมนูผู้ใช้ ${user?.name || ''}`.trim()}
+            aria-haspopup="menu"
+            aria-expanded={showDropdown}
             className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <div className="w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-900/50 flex items-center justify-center ring-2 ring-brand-100/50 dark:ring-brand-900/30">
-              <span className="text-sm font-semibold text-brand-700 dark:text-brand-300 font-heading">{initials}</span>
+              <i aria-hidden="true" className="bx bxs-user text-lg text-brand-600 dark:text-brand-300"></i>
             </div>
             <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300">{user?.name?.split(' ')[0]}</span>
           </button>
@@ -245,7 +255,7 @@ export function Navbar() {
                   onClick={() => setShowDropdown(false)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                 >
-                  <i className="bx bx-user-circle text-base"></i>
+                  <i aria-hidden="true" className="bx bx-user-circle text-base"></i>
                   โปรไฟล์ของฉัน
                 </Link>
                 {canSign && (
@@ -254,7 +264,7 @@ export function Navbar() {
                     onClick={() => setShowDropdown(false)}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                   >
-                    <i className="bx bx-pen text-base"></i>
+                    <i aria-hidden="true" className="bx bx-pen text-base"></i>
                     ลายเซ็นของฉัน
                   </Link>
                 )}
@@ -262,7 +272,7 @@ export function Navbar() {
                   onClick={logout}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
-                  <i className="bx bx-log-out text-base"></i>
+                  <i aria-hidden="true" className="bx bx-log-out text-base"></i>
                   ออกจากระบบ
                 </button>
               </div>

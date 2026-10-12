@@ -16,7 +16,7 @@ function Section({ id, icon, title, description, children, footer }) {
     <section id={id} className="card scroll-mt-24">
       <header className="px-5 sm:px-6 pt-5 pb-4 border-b border-border-light/60 dark:border-border-dark/60 flex items-start gap-3">
         <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-300 flex items-center justify-center shrink-0">
-          <i className={`bx ${icon} text-lg`}></i>
+          <i aria-hidden="true" className={`bx ${icon} text-lg`}></i>
         </div>
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -51,7 +51,7 @@ function PasswordInput({ id, value, onChange, autoComplete, invalid }) {
         aria-invalid={invalid || undefined} onChange={e => onChange(e.target.value)} />
       <button type="button" onClick={() => setShow(s => !s)} aria-label={show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
         className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-        <i className={`bx ${show ? 'bx-hide' : 'bx-show'} text-lg`}></i>
+        <i aria-hidden="true" className={`bx ${show ? 'bx-hide' : 'bx-show'} text-lg`}></i>
       </button>
     </div>
   )
@@ -227,7 +227,7 @@ export default function Profile() {
             </form>
             {pwError && (
               <p className="mt-3 text-sm text-red-500 dark:text-red-400 flex items-center gap-1.5">
-                <i className="bx bx-error-circle"></i> {pwError}
+                <i aria-hidden="true" className="bx bx-error-circle"></i> {pwError}
               </p>
             )}
           </Section>

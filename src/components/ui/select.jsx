@@ -15,10 +15,13 @@ import React, { useState, useEffect, useRef } from 'react'
  * Props:
  *   value       — current value ('' for none)
  *   onChange    — (value) => void
- *   options     — array of { value, label } or plain strings
+ *   options     — array of { value, label } or plain strings; an option may
+ *                 also carry `disabled`, a `hint` line shown under it (styled
+ *                 by `hintClassName`) and a `badge` shown after the label
  *   placeholder — shown when nothing is selected
  *   icon        — optional Boxicons class for a leading icon, e.g. 'bx-car'
  *   disabled    — disables the trigger
+ *   ariaLabel   — accessible name when there is no visible <label> for it
  */
 export function Select({
   value = '',
@@ -28,10 +31,12 @@ export function Select({
   icon = '',
   disabled = false,
   className = '',
+  ariaLabel,
 }) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const rootRef = useRef(null)
+  const listRef = useRef(null)
 
   // Normalize string options to { value, label } once per render.
   const items = options.map((o) => (typeof o === 'string' ? { value: o, label: o } : o))
@@ -47,6 +52,22 @@ export function Select({
     return () => document.removeEventListener('mousedown', onDocMouseDown)
   }, [open])
 
+  // Long lists (e.g. 24 hours): open with the selected option centred, then
+  // keep the highlighted one in view. Scrolls the list only, never the page.
+  useEffect(() => {
+    const list = listRef.current
+    const el = open && selectedIndex >= 0 ? list?.children[selectedIndex] : null
+    if (el) list.scrollTop = el.offsetTop - (list.clientHeight - el.offsetHeight) / 2
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+  useEffect(() => {
+    const list = listRef.current
+    const el = open && activeIndex >= 0 ? list?.children[activeIndex] : null
+    if (!el) return
+    if (el.offsetTop < list.scrollTop) list.scrollTop = el.offsetTop
+    else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight
+  }, [open, activeIndex])
+
   function openPanel() {
     if (disabled) return
     setOpen(true)
@@ -55,6 +76,7 @@ export function Select({
 
   function commit(index) {
     const item = items[index]
+    if (item?.disabled) return
     if (item) onChange && onChange(item.value)
     setOpen(false)
   }
@@ -93,6 +115,7 @@ export function Select({
         onKeyDown={onKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel ? `${ariaLabel}: ${selected ? selected.label : placeholder}` : undefined}
         className={`w-full h-11 ${icon ? 'pl-10' : 'pl-3.5'} pr-9 flex items-center justify-between rounded-xl border bg-white dark:bg-gray-800 text-sm text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 disabled:opacity-50 disabled:cursor-not-allowed ${
           open
             ? 'border-brand-400 ring-2 ring-brand-100 dark:ring-brand-900/40'
@@ -100,10 +123,11 @@ export function Select({
         } ${selected ? 'text-gray-900 dark:text-gray-100' : 'text-neutral-400'}`}
       >
         {icon && (
-          <i className={`bx ${icon} absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400`}></i>
+          <i aria-hidden="true" className={`bx ${icon} absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400`}></i>
         )}
         <span className="truncate">{selected ? selected.label : placeholder}</span>
         <i
+          aria-hidden="true"
           className={`bx bx-chevron-down absolute right-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400 transition-transform duration-200 ${
             open ? 'rotate-180' : ''
           }`}
@@ -115,7 +139,7 @@ export function Select({
           role="listbox"
           className="absolute z-50 top-full mt-1 left-0 right-0 origin-top overflow-hidden rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 shadow-xl motion-safe:animate-scale-in"
         >
-          <div className="max-h-60 overflow-y-auto py-1">
+          <div ref={listRef} className="max-h-60 overflow-y-auto py-1">
             {items.length === 0 && (
               <div className="px-3.5 py-3 text-xs text-neutral-400 text-center">ไม่มีตัวเลือก</div>
             )}
@@ -128,16 +152,25 @@ export function Select({
                   type="button"
                   role="option"
                   aria-selected={isSelected}
+                  aria-disabled={o.disabled || undefined}
                   onMouseEnter={() => setActiveIndex(i)}
                   onClick={() => commit(i)}
                   className={`w-full px-3.5 py-2.5 text-sm flex items-center gap-2.5 text-left transition-colors ${
-                    isSelected
+                    o.disabled
+                      ? 'cursor-not-allowed text-neutral-500 dark:text-gray-400'
+                      : isSelected
                       ? 'text-brand-700 dark:text-brand-300 font-medium bg-brand-50/60 dark:bg-brand-950/30'
                       : 'text-neutral-700 dark:text-gray-300'
-                  } ${isActive && !isSelected ? 'bg-brand-50 dark:bg-brand-950/40' : ''}`}
+                  } ${isActive && !isSelected && !o.disabled ? 'bg-brand-50 dark:bg-brand-950/40' : ''}`}
                 >
-                  <span className="flex-1 min-w-0 truncate">{o.label}</span>
-                  {isSelected && <i className="bx bx-check text-base text-brand-500 shrink-0"></i>}
+                  <span className="flex-1 min-w-0">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className={`truncate ${o.disabled ? 'line-through decoration-neutral-400/70' : ''}`}>{o.label}</span>
+                      {o.badge && <span className="shrink-0 px-1.5 py-px rounded-md text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">{o.badge}</span>}
+                    </span>
+                    {o.hint && <span className={`block text-[11px] leading-snug mt-0.5 whitespace-normal ${o.hintClassName || 'text-amber-700 dark:text-amber-300'}`}>{o.hint}</span>}
+                  </span>
+                  {isSelected && <i aria-hidden="true" className="bx bx-check text-base text-brand-500 shrink-0"></i>}
                 </button>
               )
             })}

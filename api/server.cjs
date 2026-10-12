@@ -13,6 +13,9 @@ const notificationRoutes = require('./routes/notifications.cjs')
 const adminRoutes = require('./routes/admin.cjs')
 const publicRoutes = require('./routes/public.cjs')
 const signingRoutes = require('./routes/signing.cjs')
+const driverRoutes = require('./routes/driver.cjs')
+const lineRoutes = require('./routes/line.cjs')
+const { startDriverReminderScheduler } = require('./lib/drivers.cjs')
 const { addClient } = require('./sse.cjs')
 const { verifyToken, resolveTokenUser } = require('./middleware/auth.cjs')
 const db = require('./db.cjs')
@@ -26,7 +29,12 @@ const SSE_REVALIDATE_MS = Number(process.env.SSE_REVALIDATE_MS || 15000)
 const SSE_KEEPALIVE_MS = Number(process.env.SSE_KEEPALIVE_MS || 30000)
 
 app.use(cors())
-app.use(express.json())
+// The LINE webhook signs the exact request bytes, so keep them for it.
+app.use(express.json({
+  verify(req, res, buf) {
+    if (req.originalUrl.startsWith('/api/line/')) req.rawBody = buf
+  },
+}))
 
 // Gzip/deflate JSON and static assets — the vendor bundle and every API
 // payload are several times smaller on the wire. The SSE stream is excluded:
@@ -79,6 +87,8 @@ app.use('/api/notifications', notificationRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/public', publicRoutes)
 app.use('/api/signing', signingRoutes)
+app.use('/api/driver', driverRoutes)
+app.use('/api/line', lineRoutes)
 
 app.get('/api/events', async (req, res) => {
   const token = req.query.token
@@ -161,6 +171,8 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
   })
+  // Evening-before LINE reminders for drivers (no-op until LINE is set up).
+  startDriverReminderScheduler()
 }
 
 // Only listen when this file is the entry point (`npm start`). Importing the

@@ -54,7 +54,7 @@ export default function SavedSignatureManager() {
             )}
             <button type="button" disabled={busy || !draft} onClick={() => run(() => saved.save(draft), 'บันทึกลายเซ็นแล้ว')}
               className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              {busy && <i className="bx bx-loader-alt animate-spin"></i>}
+              {busy && <i aria-hidden="true" className="bx bx-loader-alt animate-spin"></i>}
               บันทึกลายเซ็น
             </button>
           </div>
@@ -74,7 +74,7 @@ export default function SavedSignatureManager() {
             </button>
             <button type="button" disabled={busy} onClick={() => { setEditing(true); setNotice('') }}
               className="flex-1 h-10 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 transition-colors disabled:opacity-50">
-              <i className="bx bx-pencil"></i> เปลี่ยนลายเซ็น
+              <i aria-hidden="true" className="bx bx-pencil"></i> เปลี่ยนลายเซ็น
             </button>
           </div>
         </>
@@ -83,7 +83,7 @@ export default function SavedSignatureManager() {
       {error && <p className="text-sm text-red-500 dark:text-red-400 mt-3">{error}</p>}
       {notice && (
         <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-3 flex items-center gap-1.5">
-          <i className="bx bx-check-circle"></i> {notice}
+          <i aria-hidden="true" className="bx bx-check-circle"></i> {notice}
         </p>
       )}
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-4">

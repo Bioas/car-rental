@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { STATUS_COLORS, effectiveStatus, signStatus } from '../lib/constants'
+import { STATUS_COLORS, effectiveStatus, signStatus, formatTime, formatBookingRange } from '../lib/constants'
 
 // Same-hue PALER/lighter text colors for the trailing status chip on
 // multi-day bars. Each is 3 Tailwind shades LIGHTER than the chip bg
@@ -43,11 +43,12 @@ function carPlate(b) {
   return b.license_plate || `${b.brand || ''} ${b.model || ''}`.trim()
 }
 function barLabel(b) {
-  return `${carPlate(b)} · ${b.user_name}`
+  return `${b.start_time ? `${formatTime(b.start_time)} ` : ''}${carPlate(b)} · ${b.user_name}`
 }
 function barTitle(b) {
   const car = [b.brand, b.model].filter(Boolean).join(' ')
-  return b.license_plate && car ? `${b.license_plate} (${car}) · ${b.user_name}` : barLabel(b)
+  const who = b.license_plate && car ? `${b.license_plate} (${car}) · ${b.user_name}` : `${carPlate(b)} · ${b.user_name}`
+  return `${who} · ${formatBookingRange(b)}`
 }
 
 function chipTextColor(status, fallback, booking) {
@@ -194,7 +195,7 @@ export function CalendarMonthGrid({
 
       // Greedy interval scheduling — same algorithm as the week view.
       if (rawBars.length > 1) {
-        const sorted = [...rawBars].sort((a, b) => a.startCol - b.startCol)
+        const sorted = [...rawBars].sort((a, b) => a.startCol - b.startCol || (a.start_time || '').localeCompare(b.start_time || ''))
         const tracks = []
         for (const bar of sorted) {
           let placed = false
@@ -225,7 +226,7 @@ export function CalendarMonthGrid({
           <div
             key={h}
             className={`px-1 flex items-center justify-center text-[10px] sm:text-xs font-semibold uppercase tracking-wider transition-colors border-r border-neutral-100/40 dark:border-gray-700/40 last:border-r-0 ${
-              i === 6 ? 'text-rose-500 dark:text-rose-300' : 'text-neutral-500 dark:text-gray-400'
+              i === 6 ? 'text-rose-600 dark:text-rose-300' : 'text-neutral-500 dark:text-gray-400'
             }`}
           >
             {h}
@@ -273,7 +274,7 @@ export function CalendarMonthGrid({
                           ? 'font-normal text-neutral-400 dark:text-gray-500 italic'
                           : 'font-medium',
                         colIdx === 6 && !day.isToday && !day.isOutOfMonth
-                          ? 'text-rose-500 dark:text-rose-300'
+                          ? 'text-rose-600 dark:text-rose-300'
                           : '',
                         !day.isToday && !day.isOutOfMonth ? 'text-neutral-600 dark:text-gray-300' : '',
                       ].join(' ')}

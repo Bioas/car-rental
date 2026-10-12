@@ -35,7 +35,7 @@ export function Pager({ page = 1, pages = 1, total = 0, limit = 20, onChange }) 
           aria-label="หน้าก่อนหน้า"
           className={page <= 1 ? disabled : idle}
         >
-          <i className="bx bx-chevron-left text-lg"></i>
+          <i aria-hidden="true" className="bx bx-chevron-left text-lg"></i>
         </button>
 
         {start > 1 && (
@@ -71,7 +71,7 @@ export function Pager({ page = 1, pages = 1, total = 0, limit = 20, onChange }) 
           aria-label="หน้าถัดไป"
           className={page >= pages ? disabled : idle}
         >
-          <i className="bx bx-chevron-right text-lg"></i>
+          <i aria-hidden="true" className="bx bx-chevron-right text-lg"></i>
         </button>
       </div>
     </div>

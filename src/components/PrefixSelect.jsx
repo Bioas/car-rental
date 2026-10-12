@@ -41,7 +41,7 @@ export default function PrefixSelect({ value, onChange, buttonClassName = '', al
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button type="button" onClick={() => setOpen(v => !v)}
-        aria-haspopup="listbox" aria-expanded={open} aria-label="คำนำหน้าชื่อ"
+        aria-haspopup="listbox" aria-expanded={open}
         className={`flex items-center justify-between gap-1 ${buttonClassName}`}>
         <span className={`min-w-0 truncate ${selected ? '' : 'text-neutral-400 dark:text-gray-500'}`}>
           {selected ? selected.label : 'คำนำหน้า'}

@@ -7,20 +7,20 @@ export function Sidebar() {
   const { sidebarOpen, toggleSidebar, notificationCount, sseConnected, connectSSE } = useApp()
 
   return (
-    <aside
-      className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-white dark:bg-surface-dark w-64 transition-transform duration-300 ease-out ${
+    <aside aria-label="เมนูหลัก"
+      className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-white dark:bg-gray-950 lg:bg-transparent lg:dark:bg-transparent w-72 lg:w-64 transition-transform duration-300 ease-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0 lg:sticky lg:top-0 lg:bottom-auto lg:left-auto lg:h-screen`}
     >
       {/* Logo Section */}
       <div className="flex items-center h-20 px-4 justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <Logo size={40} />
+          <Logo size={46} />
           <div className="min-w-0">
-            <h1 className="font-heading font-semibold text-sm text-gray-900 dark:text-white truncate" title="วิทยาลัยเทคนิคบุรีรัมย์">
+            <h1 className="font-heading font-semibold text-base leading-snug text-gray-900 dark:text-white truncate" title="วิทยาลัยเทคนิคบุรีรัมย์">
               วิทยาลัยเทคนิคบุรีรัมย์
             </h1>
-            <p className="text-[10px] text-gray-400 dark:text-gray-500 -mt-0.5 truncate font-medium tracking-wide">
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate font-medium">
               ระบบบริหารจัดการยานพาหนะ
             </p>
           </div>
@@ -28,9 +28,10 @@ export function Sidebar() {
         {/* Close button — visible only on mobile */}
         <button
           onClick={toggleSidebar}
+          aria-label="ปิดเมนู"
           className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all duration-200 flex-shrink-0"
         >
-          <i className="bx bx-x text-xl"></i>
+          <i aria-hidden="true" className="bx bx-x text-xl"></i>
         </button>
       </div>
 
@@ -45,15 +46,19 @@ export function Sidebar() {
               adminMiddleware) — every logged-in user sees the same full
               menu, so there is no role branching here. */}
           <SidebarLink to="/app" label="แดชบอร์ด" onClick={() => sidebarOpen && toggleSidebar()}>
-            <i className="bx bx-home text-xl"></i>
+            <i aria-hidden="true" className="bx bx-home text-xl"></i>
           </SidebarLink>
 
           <SidebarLink to="/app/bookings" label="คำขอจอง" onClick={() => sidebarOpen && toggleSidebar()}>
-            <i className="bx bxs-check-circle text-xl"></i>
+            <i aria-hidden="true" className="bx bxs-check-circle text-xl"></i>
+          </SidebarLink>
+
+          <SidebarLink to="/app/drivers" label="ตารางคนขับ" onClick={() => sidebarOpen && toggleSidebar()}>
+            <i aria-hidden="true" className="bx bx-id-card text-xl"></i>
           </SidebarLink>
 
           <SidebarLink to="/app/reports" label="รายงาน" onClick={() => sidebarOpen && toggleSidebar()}>
-            <i className="bx bx-bar-chart-alt-2 text-xl"></i>
+            <i aria-hidden="true" className="bx bx-bar-chart-alt-2 text-xl"></i>
           </SidebarLink>
 
           {/* เอกสารรอเซ็น lives inline in "คำขอจอง" (BookingsManage), and the
@@ -61,7 +66,7 @@ export function Sidebar() {
               there — there is no separate signing page. */}
 
           <SidebarLink to="/app/notifications" label="การแจ้งเตือน" badge={notificationCount} onClick={() => sidebarOpen && toggleSidebar()}>
-            <i className="bx bx-bell text-xl"></i>
+            <i aria-hidden="true" className="bx bx-bell text-xl"></i>
           </SidebarLink>
         </div>
 
@@ -72,7 +77,7 @@ export function Sidebar() {
             ระบบ
           </p>
           <SidebarLink to="/app/settings" matchPrefix label="ตั้งค่า" onClick={() => sidebarOpen && toggleSidebar()}>
-            <i className="bx bx-cog text-xl"></i>
+            <i aria-hidden="true" className="bx bx-cog text-xl"></i>
           </SidebarLink>
         </div>
       </nav>
@@ -95,10 +100,10 @@ export function Sidebar() {
             {sseConnected ? (
               <>
                 <div className="absolute inset-0 rounded-lg bg-emerald-400/20 dark:bg-emerald-400/10 animate-pulse" />
-                <i className="bx bx-wifi text-base text-emerald-600 dark:text-emerald-400 relative"></i>
+                <i aria-hidden="true" className="bx bx-wifi text-base text-emerald-600 dark:text-emerald-400 relative"></i>
               </>
             ) : (
-              <i className="bx bx-wifi-off text-base text-red-500 dark:text-red-400 relative"></i>
+              <i aria-hidden="true" className="bx bx-wifi-off text-base text-red-500 dark:text-red-400 relative"></i>
             )}
           </div>
           {/* Text */}

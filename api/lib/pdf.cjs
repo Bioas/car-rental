@@ -40,6 +40,11 @@ const THAI_MONTHS_FULL = [
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ]
 
+// "08:00" → "08.00" for the form's "เวลา …… น." blank; blank for whole-day bookings.
+function pdfTime(t) {
+  return t ? t.replace(':', '.') : ''
+}
+
 function dateParts(value) {
   if (!value) return { day: '', month: '', year: '' }
   const d = new Date(value)
@@ -349,7 +354,7 @@ async function renderBookingPdf(booking, car) {
       { text: labels[1] }, { blank: blanks.day, value: start.day },
       { text: labels[2] }, { blank: blanks.month, value: start.month },
       { text: labels[3] }, { blank: blanks.year, value: start.year },
-      { text: labels[4] }, { blank: lastW },
+      { text: labels[4] }, { blank: lastW, value: pdfTime(booking.start_time) },
       { text: labels[5] },
     ], { size })
   }
@@ -366,7 +371,7 @@ async function renderBookingPdf(booking, car) {
       { text: labels[0] }, { blank: blanks.day, value: end.day },
       { text: labels[1] }, { blank: blanks.month, value: end.month },
       { text: labels[2] }, { blank: blanks.year, value: end.year },
-      { text: labels[3] }, { blank: lastW },
+      { text: labels[3] }, { blank: lastW, value: pdfTime(booking.end_time) },
       { text: labels[4] },
     ], { size })
   }

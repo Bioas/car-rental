@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
 import SignaturePad from './SignaturePad'
-import { Select } from './ui/select'
-import { driverStageKeys, formatThaiDate, docLabel, carLabel } from '../lib/constants'
+import DriverSelect from './DriverSelect'
+import { driverStageKeys, formatBookingRange, docLabel, carLabel } from '../lib/constants'
 import { useStageTitle } from '../lib/docSettings'
 import { useSavedSignature } from '../lib/savedSignature'
+import { useDialog, dialogProps } from '../lib/useDialog'
 
 // Mirrors api/lib/signing.cjs's stageCanReject — only the two stages whose
 // paper form has an "อนุญาต/ไม่อนุญาต" checkbox may reject a request outright.
@@ -26,6 +27,9 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [drivers, setDrivers] = useState([])
+  // Tied to the booking it was computed for (see ApproveBookingModal).
+  const [recommended, setRecommended] = useState({ bookingId: null, id: null })
+  const recommendedId = recommended.bookingId === booking?.id ? recommended.id : null
   const [driverMode, setDriverMode] = useState('driver')
   const [driverId, setDriverId] = useState('')
   // A signature saved on the account (navbar → ลายเซ็นของฉัน) fills the
@@ -58,13 +62,25 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
   useEffect(() => {
     if (!booking || !assignsDriver) return
     let cancelled = false
-    fetch('/api/signing/drivers', { headers: authHeaders() })
+    fetch(`/api/signing/drivers?booking_id=${encodeURIComponent(booking.id)}`, { headers: authHeaders() })
       .then(res => res.json())
-      .then(data => { if (!cancelled) setDrivers(data.drivers || []) })
+      .then(data => {
+        if (cancelled) return
+        setDrivers(data.drivers || [])
+        setRecommended({ bookingId: booking.id, id: data.recommended_id || null })
+      })
       .catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking, assignsDriver])
+
+  // Nobody chosen yet (no earlier signer picked one): start on the suggestion.
+  useEffect(() => {
+    if (assignsDriver && driverMode === 'driver' && !driverId && recommendedId) setDriverId(recommendedId)
+  }, [assignsDriver, driverMode, driverId, recommendedId])
+
+  const panelRef = useRef(null)
+  useDialog(!!booking, () => !saving && onClose(), panelRef)
 
   if (!booking) return null
 
@@ -76,6 +92,10 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
     }
     if (decision === 'approve' && assignsDriver && driverMode === 'driver' && !driverId) {
       setError('กรุณาเลือกพนักงานขับรถ หรือเลือกให้ผู้ยืมขับเอง')
+      return
+    }
+    if (decision === 'approve' && assignsDriver && driverMode === 'driver' && drivers.find(d => d.id === driverId)?.busy) {
+      setError('พนักงานขับรถที่เลือกติดงานในช่วงเวลานี้ กรุณาเลือกคนอื่น หรือให้ผู้ยืมขับเอง')
       return
     }
     setSaving(true)
@@ -120,35 +140,35 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !saving && onClose()}>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] sm:max-h-[92vh] overflow-y-auto scrollbar-none" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} {...dialogProps('เซ็นเอกสาร')} className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] sm:max-h-[92vh] overflow-y-auto scrollbar-none" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
           <div>
             <h3 className="font-heading font-semibold text-base text-gray-900 dark:text-white">เซ็นเอกสารเลขที่ {docLabel(booking) || '-'}</h3>
             <p className="text-xs text-neutral-500">ในฐานะ{stageTitle(actionStage)} — ตรวจสอบข้อมูลแล้วลงลายมือชื่อยืนยัน</p>
           </div>
-          <button onClick={() => !saving && onClose()}
+          <button onClick={() => !saving && onClose()} aria-label="ปิด"
             className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-400 transition-colors">
-            <i className="bx bx-x text-xl"></i>
+            <i aria-hidden="true" className="bx bx-x text-xl"></i>
           </button>
         </div>
 
         <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-4 border border-gray-100 dark:border-gray-700 space-y-1.5 text-sm mb-4">
           <div className="flex justify-between gap-3">
-            <span className="text-gray-500 dark:text-gray-400">ผู้ยืม</span>
-            <span className="font-medium text-gray-900 dark:text-white text-right">{booking.user_name}{booking.user_position ? ` (${booking.user_position})` : ''}</span>
+            <span className="text-gray-500 dark:text-gray-400 shrink-0 whitespace-nowrap">ผู้ยืม</span>
+            <span className="font-medium text-gray-900 dark:text-white text-right min-w-0">{booking.user_name}{booking.user_position ? ` (${booking.user_position})` : ''}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-gray-500 dark:text-gray-400">ยานพาหนะ</span>
-            <span className="font-medium text-gray-900 dark:text-white text-right">{carLabel(booking)}</span>
+            <span className="text-gray-500 dark:text-gray-400 shrink-0 whitespace-nowrap">ยานพาหนะ</span>
+            <span className="font-medium text-gray-900 dark:text-white text-right min-w-0">{carLabel(booking)}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-gray-500 dark:text-gray-400">ช่วงวันที่ใช้รถ</span>
-            <span className="font-medium text-gray-900 dark:text-white text-right">{formatThaiDate(booking.start_date)} → {formatThaiDate(booking.end_date)}</span>
+            <span className="text-gray-500 dark:text-gray-400 shrink-0 whitespace-nowrap">ช่วงวันที่ใช้รถ</span>
+            <span className="font-medium text-gray-900 dark:text-white text-right min-w-0">{formatBookingRange(booking)}</span>
           </div>
           {booking.purpose && (
             <div className="flex justify-between gap-3">
-              <span className="text-gray-500 dark:text-gray-400 shrink-0">เหตุผล</span>
-              <span className="font-medium text-gray-900 dark:text-white text-right">{booking.purpose}</span>
+              <span className="text-gray-500 dark:text-gray-400 shrink-0 whitespace-nowrap">เหตุผล</span>
+              <span className="font-medium text-gray-900 dark:text-white text-right min-w-0">{booking.purpose}</span>
             </div>
           )}
         </div>
@@ -163,7 +183,7 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
                     ? 'border-sky-400 bg-sky-50 dark:border-sky-500 dark:bg-sky-900/20'
                     : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}>
-                <i className={`bx bx-car text-lg ${driverMode === 'driver' ? 'text-sky-500' : 'text-gray-400'}`}></i>
+                <i aria-hidden="true" className={`bx bx-car text-lg ${driverMode === 'driver' ? 'text-sky-500' : 'text-gray-400'}`}></i>
                 <span className="text-xs font-semibold text-gray-900 dark:text-white">มอบหมายพนักงานขับรถ</span>
               </button>
               <button type="button" onClick={() => setDriverMode('self')}
@@ -172,18 +192,16 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
                     ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-900/20'
                     : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}>
-                <i className={`bx bx-user text-lg ${driverMode === 'self' ? 'text-brand-500' : 'text-gray-400'}`}></i>
+                <i aria-hidden="true" className={`bx bx-user text-lg ${driverMode === 'self' ? 'text-brand-500' : 'text-gray-400'}`}></i>
                 <span className="text-xs font-semibold text-gray-900 dark:text-white">ผู้ยืมขับเอง</span>
               </button>
             </div>
             {driverMode === 'driver' && (
               <div className="mt-2 animate-fade-in">
-                <Select value={driverId} onChange={setDriverId}
-                  icon="bx-user-pin" placeholder="— เลือกพนักงานขับรถ —"
-                  options={drivers.map(d => ({ value: d.id, label: d.phone ? `${d.name} (${d.phone})` : d.name }))} />
+                <DriverSelect drivers={drivers} recommendedId={recommendedId} value={driverId} onChange={(v) => { setDriverId(v); setError('') }} />
                 {drivers.length === 0 && (
                   <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                    <i className="bx bx-info-circle text-sm"></i>
+                    <i aria-hidden="true" className="bx bx-info-circle text-sm"></i>
                     ยังไม่มีพนักงานขับรถในระบบ — เพิ่มได้ที่ ตั้งค่า → ผู้ใช้
                   </p>
                 )}
@@ -201,11 +219,11 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
               </div>
               <div className="flex items-center justify-between gap-3 mt-2 pt-2 border-t border-gray-100">
                 <span className="text-xs text-brand-700 font-medium flex items-center gap-1">
-                  <i className="bx bx-check-circle text-sm"></i> ใช้ลายเซ็นที่บันทึกไว้
+                  <i aria-hidden="true" className="bx bx-check-circle text-sm"></i> ใช้ลายเซ็นที่บันทึกไว้
                 </span>
                 <button type="button" onClick={() => { setUsingSaved(false); setSignature('') }}
                   className="text-xs font-medium text-gray-500 hover:text-brand-600 flex items-center gap-1">
-                  <i className="bx bx-pencil text-sm"></i> เซ็นใหม่แทน
+                  <i aria-hidden="true" className="bx bx-pencil text-sm"></i> เซ็นใหม่แทน
                 </button>
               </div>
             </div>
@@ -221,7 +239,7 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
                     <span className="block text-sm font-semibold text-brand-700 dark:text-brand-300">ใช้ลายเซ็นที่บันทึกไว้</span>
                     <span className="block text-[11px] text-gray-500 dark:text-gray-400">แตะเพื่อใส่ลายเซ็นของคุณทันที</span>
                   </span>
-                  <i className="bx bx-chevron-right text-xl text-brand-400 shrink-0"></i>
+                  <i aria-hidden="true" className="bx bx-chevron-right text-xl text-brand-400 shrink-0"></i>
                 </button>
               )}
               <SignaturePad value={signature} onChange={setSignature} />
@@ -247,7 +265,7 @@ export default function SignDocumentModal({ booking, onClose, onSigned }) {
           )}
           <button type="button" disabled={saving || !signature} onClick={() => submitDecision('approve')}
             className="flex-1 h-11 inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 shadow-md shadow-brand-200/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-            {saving && <i className="bx bx-loader-alt text-base animate-spin"></i>}
+            {saving && <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i>}
             <span>{saving ? 'กำลังบันทึก...' : 'เซ็นยืนยัน'}</span>
           </button>
         </div>

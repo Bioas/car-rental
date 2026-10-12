@@ -59,7 +59,7 @@ export default function SignProgress({ booking }) {
       </div>
       <div className="mt-1.5 flex items-start justify-between gap-3 text-[11px]">
         <span className={`flex items-start gap-1 min-w-0 ${tone}`}>
-          <i className="bx bx-edit-alt text-sm leading-none mt-px shrink-0"></i>
+          <i aria-hidden="true" className="bx bx-edit-alt text-sm leading-none mt-px shrink-0"></i>
           <span className="line-clamp-2">{message}</span>
         </span>
         <span className="shrink-0 text-gray-400 dark:text-gray-500 tabular-nums">

@@ -39,14 +39,14 @@ export function Toast({ type = 'success', message, submessage, onClose, duration
   }
 
   return (
-    <div className="fixed top-6 right-6 z-[100]" onClick={handleClick}>
+    <div className="fixed top-6 right-6 z-[100]" onClick={handleClick} role={isSuccess ? 'status' : 'alert'} aria-live={isSuccess ? 'polite' : 'assertive'}>
       <div className={`flex items-center gap-3.5 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border ${borderColor} px-5 py-4 ${enterAnim} cursor-pointer ${closing ? exitAnim : ''}`}>
         <div className="relative w-10 h-10 shrink-0">
           {isSuccess && (
             <div className={`absolute inset-0 rounded-full ${ringColor} animate-success-ring`}></div>
           )}
           <div className={`w-full h-full rounded-full ${bgColor} flex items-center justify-center ${iconAnim}`}>
-            <i className={`bx ${icon} text-2xl ${iconColor}`}></i>
+            <i aria-hidden="true" className={`bx ${icon} text-2xl ${iconColor}`}></i>
           </div>
         </div>
         <div className="min-w-0">
@@ -57,7 +57,7 @@ export function Toast({ type = 'success', message, submessage, onClose, duration
             <p className="text-xs text-gray-500 dark:text-gray-400">{message}</p>
           )}
         </div>
-        <i className="bx bx-x text-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors shrink-0"></i>
+        <i aria-hidden="true" className="bx bx-x text-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 transition-colors shrink-0"></i>
       </div>
     </div>
   )

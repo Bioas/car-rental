@@ -92,15 +92,15 @@
   }
 
   .badge-pending {
-    @apply badge bg-amber-50 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300;
+    @apply badge bg-amber-50 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300;
   }
 
   .badge-approved {
-    @apply badge bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300;
+    @apply badge bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300;
   }
 
   .badge-available {
-    @apply badge bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300;
+    @apply badge bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300;
   }
 }
 
@@ -144,3 +144,61 @@
     display: none;
   }
 }
+
+/* ─── Accessibility ───────────────────────────────────────────────────────
+   Contrast: grey-400 (and neutral-400) text on white is only ~2.5:1, below
+   the 4.5:1 WCAG AA needs for body text, and grey-500 on the dark surfaces is
+   ~3.5:1. Secondary text keeps its role in the hierarchy but uses the next
+   readable shade — set once here instead of in hundreds of components.
+   Placeholders and hover states use other selectors and are untouched. */
+.text-gray-400 { color: #6b7280; }
+.text-neutral-400 { color: #737373; }
+.text-amber-600 { color: #b45309; }
+.text-sky-600 { color: #0369a1; }
+.text-emerald-600 { color: #047857; }
+/* Dark mode: `html.dark` outranks Tailwind's `dark:` variants (which come last
+   in the stylesheet with the same specificity). An explicit lighter `dark:`
+   colour on the element still wins over the bare .text-*-400 rules below. */
+.dark .text-gray-400 { color: #9ca3af; }
+.dark .text-neutral-400 { color: #a3a3a3; }
+.dark .text-gray-500 { color: #9ca3af; }
+.dark .text-neutral-500 { color: #a3a3a3; }
+html.dark .dark\:text-gray-500 { color: #9ca3af; }
+html.dark .dark\:text-neutral-500 { color: #a3a3a3; }
+
+/* Keyboard focus: a clear ring on anything focused from the keyboard, even
+   where a component removed the browser outline (focus:outline-none). Text
+   fields keep their own border/ring styling. */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='option']:focus-visible,
+[role='dialog']:focus-visible,
+[tabindex]:not(input):not(textarea):focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px;
+}
+.dark a:focus-visible,
+.dark button:focus-visible,
+.dark [role='button']:focus-visible,
+.dark [tabindex]:not(input):not(textarea):focus-visible {
+  outline-color: #60a5fa !important;
+}
+[role='dialog']:focus-visible { outline-offset: -2px; }
+
+/* "Skip to content" link: hidden until focused with Tab. */
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -100px;
+  z-index: 200;
+  padding: 0.6rem 1rem;
+  border-radius: 0.75rem;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+.skip-link:focus { top: 1rem; }

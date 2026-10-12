@@ -165,10 +165,12 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
   // with the parent's cleanup (e.g. modal closing first vs picker
   // closing first). The default trigger-button modes (desktop dropdown
   // + standalone mobile overlay) DO own their own lock because there's
-  // no parent surface competing for body-scroll.
+  // no parent surface competing for body-scroll. Only the mobile overlay
+  // locks: the desktop dropdown sits in the page flow, and locking there
+  // would stop the page from scrolling to reveal the rest of the panel.
   useEffect(() => {
     if (inline || noTrigger) return
-    if (open) {
+    if (open && window.matchMedia('(max-width: 639px)').matches) {
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
@@ -257,9 +259,9 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
         } ${
           open ? 'border-brand-400 ring-2 ring-brand-100' : 'border-gray-200 dark:border-gray-600 hover:border-brand-300'
         } ${selStart ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>
-        <i className={`bx bx-calendar shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} ${selStart ? 'text-brand-500' : 'text-gray-400'}`}></i>
+        <i aria-hidden="true" className={`bx bx-calendar shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} ${selStart ? 'text-brand-500' : 'text-gray-400'}`}></i>
         <span className="flex-1 truncate text-left leading-tight">{displayText}</span>
-        <i className={`bx bx-chevron-down shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
+        <i aria-hidden="true" className={`bx bx-chevron-down shrink-0 ${size === 'lg' ? 'text-xl' : 'text-base'} text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}></i>
       </button>
       )}
       {open && (
@@ -315,14 +317,14 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
                 <div className="flex items-center justify-between mb-4">
                   <button type="button" onClick={() => setViewDate(new Date(vy, vm - 1, 1))}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                    <i className="bx bx-chevron-left text-base"></i>
+                    <i aria-hidden="true" className="bx bx-chevron-left text-base"></i>
                   </button>
                   <div className="text-sm font-medium text-neutral-700 dark:text-gray-200">
                     {step === 'end' && selStart ? 'เลือกวันคืนรถ' : 'เลือกวันเริ่มต้น'}
                   </div>
                   <button type="button" onClick={() => setViewDate(new Date(vy, vm + 1, 1))}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 transition-colors">
-                    <i className="bx bx-chevron-right text-base"></i>
+                    <i aria-hidden="true" className="bx bx-chevron-right text-base"></i>
                   </button>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
@@ -357,7 +359,7 @@ export default function RangeDatePicker({ startDate, endDate, onChange, min, siz
                     ? 'text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800'
                     : 'text-gray-400 bg-gray-100 dark:bg-gray-700 cursor-not-allowed'
                 }`}>
-                <i className="bx bx-check text-base"></i>
+                <i aria-hidden="true" className="bx bx-check text-base"></i>
                 ตกลง
               </button>
             )}

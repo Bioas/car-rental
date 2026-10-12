@@ -5,6 +5,7 @@ const { broadcastToRole } = require('../sse.cjs')
 const { sendError } = require('../lib/http-error.cjs')
 const { STAGE_KEYS, PARALLEL_STAGE_KEYS, WITHOUT_SIGNATURE_IMAGES, stageCanReject, paperKeysOf, currentStage, stagesToNotify, driverStageKeys } = require('../lib/signing.cjs')
 const { notifyStageSigners, notifyFullySigned, notifyRejected, closeSignRequests, carOf } = require('../lib/notify.cjs')
+const { notifyDriverAssigned, driverAvailability, driverClashError } = require('../lib/drivers.cjs')
 
 const router = Router()
 
@@ -62,6 +63,8 @@ async function enrichForSigning(bookings) {
       car_id: str(b.car_id),
       start_date: b.start_date,
       end_date: b.end_date,
+      start_time: b.start_time || '',
+      end_time: b.end_time || '',
       purpose: b.purpose || '',
       destination_place: b.destination_place || '',
       destination_district: b.destination_district || '',
@@ -89,8 +92,24 @@ async function enrichForSigning(bookings) {
 // unlike the admin-only GET /api/admin/drivers.
 router.get('/drivers', async (req, res) => {
   try {
-    const drivers = await find(collections.users, { role: 'driver' }, { sort: { name: 1 } })
-    res.json({ drivers: drivers.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '' })) })
+    // With ?booking_id=, each driver also carries the trip that keeps them
+    // busy during that booking (or null) and their trip count for its week,
+    // and the free driver with the lightest week comes back as recommended_id.
+    const bid = req.query.booking_id ? toId(req.query.booking_id) : null
+    const booking = bid ? await findOne(collections.bookings, { _id: bid }, { projection: WITHOUT_SIGNATURE_IMAGES }) : null
+    if (!booking) {
+      const drivers = await find(collections.users, { role: 'driver' }, { sort: { name: 1 } })
+      return res.json({ drivers: drivers.map((u) => ({ id: str(u._id), name: u.name, phone: u.phone || '', busy: null })) })
+    }
+    const { drivers, busy, load, week, recommendedId } = await driverAvailability(booking)
+    res.json({
+      drivers: drivers.map((u) => ({
+        id: str(u._id), name: u.name, phone: u.phone || '',
+        busy: busy.get(str(u._id)) || null, week_trips: load.get(str(u._id)) || 0,
+      })),
+      week,
+      recommended_id: recommendedId,
+    })
   } catch (err) {
     sendError(res, err)
   }
@@ -242,6 +261,8 @@ router.put('/:id/sign', signerMiddleware, async (req, res) => {
         if (!driver || driver.role !== 'driver') {
           return res.status(400).json({ error: 'ไม่พบพนักงานขับรถที่เลือก' })
         }
+        const clash = await driverClashError(booking, driver)
+        if (clash) return res.status(409).json({ error: clash, code: 'driver_busy' })
       }
       driverFields = {
         self_drive: !driver,
@@ -281,6 +302,7 @@ router.put('/:id/sign', signerMiddleware, async (req, res) => {
       } else if (set.status === 'approved') {
         await closeSignRequests(id)
         await notifyFullySigned(updated, car)
+        await notifyDriverAssigned(updated)
       } else if (set.approval_stage && set.approval_stage !== booking.approval_stage) {
         await notifyStageSigners(updated, stagesToNotify(set.approval_stage, paperKeys), car)
       }

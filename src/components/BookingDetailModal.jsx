@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { STATUS_COLORS, chainStepState, effectiveStatus, docLabel } from '../lib/constants'
+import { STATUS_COLORS, chainStepState, effectiveStatus, docLabel, timeRangeLabel, formatTime } from '../lib/constants'
 import { useChainSteps, useAssignedSigners } from '../lib/docSettings'
 import { useApp } from '../context/AppContext'
+import { useDialog, dialogProps } from '../lib/useDialog'
 
 function fmtSignedAt(dateStr) {
   return new Date(dateStr).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -59,7 +60,7 @@ function SignatureChain({ booking, assigned = {} }) {
                 {state === 'current' && (
                   <span aria-hidden="true" className="absolute inset-0 rounded-full bg-amber-300/50 dark:bg-amber-500/30 motion-safe:animate-ping" />
                 )}
-                <i className={`relative bx ${icon} text-sm`}></i>
+                <i aria-hidden="true" className={`relative bx ${icon} text-sm`}></i>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
@@ -73,7 +74,7 @@ function SignatureChain({ booking, assigned = {} }) {
                     {entry.name
                       ? <>{entry.name}{entry.position ? ` · ${entry.position}` : ''}</>
                       : state === 'rejected' ? null : 'เซ็นแล้ว'}
-                    {state === 'rejected' && <span className={`${entry.name ? 'ml-1.5 ' : ''}text-rose-500 dark:text-rose-400 font-medium`}>ไม่อนุญาต</span>}
+                    {state === 'rejected' && <span className={`${entry.name ? 'ml-1.5 ' : ''}text-rose-600 dark:text-rose-400 font-medium`}>ไม่อนุญาต</span>}
                   </div>
                 ) : state === 'paper' ? (
                   <div className="text-[11px] text-sky-600 dark:text-sky-400 truncate">
@@ -178,13 +179,13 @@ function PdfPreview({ bookingId, docNumber, authHeaders, wide, publicMode, looku
       <div className={`hidden sm:flex sm:flex-[1.6] min-h-0 flex-col border-b sm:border-b-0 sm:border-r border-neutral-100 dark:border-gray-700 bg-neutral-50 dark:bg-gray-900/40 ${wide ? 'h-full' : ''}`}>
         <div className="px-4 pt-4 pb-2 flex items-center justify-between shrink-0">
           <span className="text-xs font-semibold text-neutral-500 dark:text-gray-400 flex items-center gap-1.5">
-            <i className="bx bxs-file-pdf text-sm text-rose-500"></i>
+            <i aria-hidden="true" className="bx bxs-file-pdf text-sm text-rose-500"></i>
             ตัวอย่างเอกสาร
           </span>
           {pdfUrl && (
             <a href={pdfUrl} download={fileName}
               className="text-[11px] font-medium text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1">
-              <i className="bx bx-download text-xs"></i> ดาวน์โหลด
+              <i aria-hidden="true" className="bx bx-download text-xs"></i> ดาวน์โหลด
             </a>
           )}
         </div>
@@ -192,7 +193,7 @@ function PdfPreview({ bookingId, docNumber, authHeaders, wide, publicMode, looku
           {needsPhone ? (
             <div className="w-full h-full flex flex-col items-center justify-center text-center px-6">
               <div className="w-12 h-12 rounded-2xl bg-white dark:bg-gray-800 border border-neutral-200 dark:border-gray-700 flex items-center justify-center text-neutral-400 dark:text-gray-500 mb-3">
-                <i className="bx bx-lock-alt text-2xl"></i>
+                <i aria-hidden="true" className="bx bx-lock-alt text-2xl"></i>
               </div>
               <p className="text-sm font-medium text-neutral-700 dark:text-gray-200">กรอกเบอร์โทรศัพท์เพื่อดูเอกสาร</p>
               <p className="text-xs text-neutral-400 dark:text-gray-500 mt-1 mb-4">ใช้เบอร์เดียวกับที่กรอกตอนส่งคำขอยืม</p>
@@ -207,7 +208,7 @@ function PdfPreview({ bookingId, docNumber, authHeaders, wide, publicMode, looku
               className="w-full h-full rounded-lg border border-neutral-200 dark:border-gray-700 bg-white" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <i className="bx bx-loader-alt text-xl animate-spin text-neutral-300 dark:text-gray-600"></i>
+              <i aria-hidden="true" className="bx bx-loader-alt text-xl animate-spin text-neutral-300 dark:text-gray-600"></i>
             </div>
           )}
         </div>
@@ -219,7 +220,7 @@ function PdfPreview({ bookingId, docNumber, authHeaders, wide, publicMode, looku
       <div className="sm:hidden order-last shrink-0 px-4 py-3 border-t border-neutral-100 dark:border-gray-700 bg-neutral-50 dark:bg-gray-900/40">
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="text-xs font-semibold text-neutral-500 dark:text-gray-400 flex items-center gap-1.5">
-            <i className="bx bxs-file-pdf text-sm text-rose-500"></i>
+            <i aria-hidden="true" className="bx bxs-file-pdf text-sm text-rose-500"></i>
             เอกสารขออนุญาตใช้รถ
           </span>
           {docNumber && <span className="text-[11px] text-neutral-400 dark:text-gray-500">เลขที่ {docNumber}</span>}
@@ -235,16 +236,16 @@ function PdfPreview({ bookingId, docNumber, authHeaders, wide, publicMode, looku
           <div className="grid grid-cols-2 gap-2">
             <a href={pdfUrl} target="_blank" rel="noopener noreferrer"
               className="h-11 rounded-xl inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 transition-colors">
-              <i className="bx bx-show text-base"></i> เปิดเอกสาร
+              <i aria-hidden="true" className="bx bx-show text-base"></i> เปิดเอกสาร
             </a>
             <a href={pdfUrl} download={fileName}
               className="h-11 rounded-xl inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-700 dark:text-brand-300 bg-white dark:bg-gray-800 border border-neutral-200 dark:border-gray-700 hover:bg-neutral-100 dark:hover:bg-gray-700 transition-colors">
-              <i className="bx bx-download text-base"></i> ดาวน์โหลด
+              <i aria-hidden="true" className="bx bx-download text-base"></i> ดาวน์โหลด
             </a>
           </div>
         ) : (
           <div className="h-11 flex items-center justify-center gap-2 text-xs text-neutral-400 dark:text-gray-500">
-            <i className="bx bx-loader-alt text-base animate-spin"></i> กำลังเตรียมเอกสาร…
+            <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i> กำลังเตรียมเอกสาร…
           </div>
         )}
       </div>
@@ -309,17 +310,12 @@ export default function BookingDetailModal({
     }
   }, [])
 
-  // Body overflow + Escape key
+  // Body overflow (Escape + focus: useDialog below)
   useEffect(() => {
     if (booking) {
       document.body.style.overflow = 'hidden'
-      function handleKey(e) {
-        if (e.key === 'Escape') onClose()
-      }
-      document.addEventListener('keydown', handleKey)
       return () => {
         document.body.style.overflow = ''
-        document.removeEventListener('keydown', handleKey)
       }
     }
     document.body.style.overflow = ''
@@ -390,6 +386,9 @@ export default function BookingDetailModal({
     }
   }
 
+  const panelRef = useRef(null)
+  useDialog(!!booking, onClose, panelRef)
+
   if (!booking) return null
 
   // Approved-but-unsigned requests must not look "อนุมัติแล้ว": the header
@@ -404,15 +403,16 @@ export default function BookingDetailModal({
       onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" />
       <div className={`relative bg-white dark:bg-gray-800 w-full ${showPdf ? 'sm:max-w-[1400px] sm:h-[92vh]' : 'sm:max-w-sm'} rounded-2xl shadow-2xl border sm:border border-neutral-200 dark:border-gray-700 overflow-hidden animate-scale-in flex flex-col max-h-[70vh] sm:max-h-[92vh]`}
+        ref={panelRef} {...dialogProps('รายละเอียดคำขอยืม')}
         onClick={e => e.stopPropagation()}>
 
         {/* Status accent bar */}
         <div className="h-[3px] w-full shrink-0" style={{ backgroundColor: STATUS_COLORS[displayStatus] || '#6b7280' }} />
 
         {/* Close button — floating */}
-        <button onClick={onClose}
+        <button aria-label="ปิด" onClick={onClose}
           className="absolute top-4 right-4 z-10 w-8 h-8 rounded-xl flex items-center justify-center bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-neutral-400 hover:text-neutral-600 dark:hover:text-gray-300 transition-all">
-          <i className="bx bx-x text-lg"></i>
+          <i className="bx bx-x text-lg" aria-hidden="true"></i>
         </button>
 
         <div className="flex flex-col sm:flex-row min-h-0 flex-1 overflow-hidden">
@@ -431,7 +431,7 @@ export default function BookingDetailModal({
                 backgroundColor: STATUS_COLORS[displayStatus] || '#6b7280',
                 boxShadow: `0 10px 20px -6px ${(STATUS_COLORS[displayStatus] || '#6b7280')}66`,
               }}>
-              <i className={`bx ${STATUS_ICONS[displayStatus] || 'bx-time-five'} text-2xl`}></i>
+              <i aria-hidden="true" className={`bx ${STATUS_ICONS[displayStatus] || 'bx-time-five'} text-2xl`}></i>
             </div>
             <div className="flex-1 min-w-0 flex flex-col justify-center">
               <div className="font-bold text-lg sm:text-xl text-neutral-800 dark:text-white leading-tight truncate">
@@ -452,7 +452,7 @@ export default function BookingDetailModal({
           {/* License plate */}
           <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
             <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
-              <i className="bx bx-id-card text-base"></i>
+              <i aria-hidden="true" className="bx bx-id-card text-base"></i>
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">ทะเบียนรถ</div>
@@ -463,7 +463,7 @@ export default function BookingDetailModal({
           {/* Car brand/model — moved down from hero */}
           <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
             <div className="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0">
-              <i className="bx bx-car text-base"></i>
+              <i aria-hidden="true" className="bx bx-car text-base"></i>
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">ยานพาหนะ</div>
@@ -476,15 +476,23 @@ export default function BookingDetailModal({
           {/* Date — full width, dates are long */}
           <div className="col-span-2 flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
             <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
-              <i className="bx bx-calendar text-base"></i>
+              <i aria-hidden="true" className="bx bx-calendar text-base"></i>
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">วันที่</div>
-              <div className="text-sm font-medium text-neutral-800 dark:text-white flex items-center gap-1.5">
-                <span>{new Date(booking.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                <span className="text-neutral-300 dark:text-gray-600">→</span>
-                <span>{new Date(booking.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </div>
+              <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">{timeRangeLabel(booking) ? 'วันและเวลา' : 'วันที่'}</div>
+              {booking.start_date === booking.end_date ? (
+                <div className="text-sm font-medium text-neutral-800 dark:text-white flex flex-wrap items-center gap-x-1.5">
+                  <span>{new Date(booking.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  {timeRangeLabel(booking) && <span className="text-neutral-500 dark:text-gray-300">· {timeRangeLabel(booking)}</span>}
+                </div>
+              ) : (
+                <div className="text-sm font-medium text-neutral-800 dark:text-white flex flex-wrap items-center gap-x-1.5">
+                  <span>{new Date(booking.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}{booking.start_time && <span className="text-neutral-500 dark:text-gray-300"> {formatTime(booking.start_time)} น.</span>}</span>
+                  <span className="text-neutral-300 dark:text-gray-600" aria-hidden="true">→</span>
+                  <span className="sr-only">ถึง</span>
+                  <span>{new Date(booking.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })}{booking.end_time && <span className="text-neutral-500 dark:text-gray-300"> {formatTime(booking.end_time)} น.</span>}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -492,7 +500,7 @@ export default function BookingDetailModal({
           {(booking.destination_place || booking.destination_district || booking.destination_province) && (
             <div className="col-span-2 flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
               <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
-                <i className="bx bx-map text-base"></i>
+                <i aria-hidden="true" className="bx bx-map text-base"></i>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">สถานที่จะไป</div>
@@ -507,7 +515,7 @@ export default function BookingDetailModal({
           {booking.attendees > 0 && (
             <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40">
               <div className="w-8 h-8 rounded-lg bg-teal-100 dark:bg-teal-900/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0">
-                <i className="bx bx-group text-base"></i>
+                <i aria-hidden="true" className="bx bx-group text-base"></i>
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">ผู้ไปราชการ</div>
@@ -520,7 +528,7 @@ export default function BookingDetailModal({
           {booking.status === 'approved' && (
             <div className={`${booking.attendees > 0 ? '' : 'col-span-2'} flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-neutral-50 dark:bg-gray-700/40`}>
               <div className="w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-sky-600 dark:text-sky-400 shrink-0">
-                <i className="bx bx-car text-base"></i>
+                <i aria-hidden="true" className="bx bx-car text-base"></i>
               </div>
               <div className="min-w-0">
                 <div className="text-[10px] font-medium text-neutral-400 dark:text-gray-500 uppercase tracking-wider">ผู้ขับขี่</div>
@@ -553,7 +561,7 @@ export default function BookingDetailModal({
         {publicMode && booking.status === 'approved' && (returnPhone === 'show' || returnFormExiting) && (
           <div className={`mx-5 mb-3 p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 motion-safe:${returnFormExiting ? 'animate-scale-out' : 'animate-scale-in'}`}>
             <label className="block text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
-              <i className="bx bx-lock-alt text-xs mr-1"></i>
+              <i aria-hidden="true" className="bx bx-lock-alt text-xs mr-1"></i>
               ยืนยันตัวตนด้วยเบอร์โทรศัพท์
             </label>
             <div className="flex gap-2">
@@ -564,9 +572,9 @@ export default function BookingDetailModal({
               <button onClick={publicReturn} disabled={returnLoading || returnPhone === 'show' || !returnPhone.trim()}
                 className="h-10 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm">
                 {returnLoading ? (
-                  <i className="bx bx-loader-alt text-sm animate-spin"></i>
+                  <i aria-hidden="true" className="bx bx-loader-alt text-sm animate-spin"></i>
                 ) : (
-                  <i className="bx bx-check text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-check text-sm"></i>
                 )}
                 <span>ยืนยัน</span>
               </button>
@@ -578,7 +586,7 @@ export default function BookingDetailModal({
         {publicMode && booking.status === 'pending' && (cancelPhone === 'show' || cancelFormExiting) && (
           <div className={`mx-5 mb-3 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 motion-safe:${cancelFormExiting ? 'animate-scale-out' : 'animate-scale-in'}`}>
             <label className="block text-xs font-medium text-rose-700 dark:text-rose-300 mb-2">
-              <i className="bx bx-lock-alt text-xs mr-1"></i>
+              <i aria-hidden="true" className="bx bx-lock-alt text-xs mr-1"></i>
               ยืนยันตัวตนด้วยเบอร์โทรศัพท์
             </label>
             <div className="flex gap-2">
@@ -589,9 +597,9 @@ export default function BookingDetailModal({
               <button onClick={publicCancel} disabled={cancelLoading || cancelPhone === 'show' || !cancelPhone.trim()}
                 className="h-10 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm">
                 {cancelLoading ? (
-                  <i className="bx bx-loader-alt text-sm animate-spin"></i>
+                  <i aria-hidden="true" className="bx bx-loader-alt text-sm animate-spin"></i>
                 ) : (
-                  <i className="bx bx-check text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-check text-sm"></i>
                 )}
                 <span>ยืนยัน</span>
               </button>
@@ -603,7 +611,7 @@ export default function BookingDetailModal({
         {!publicMode && booking.admin_notes && (
           <div className="px-5 pt-2 pb-2 -mt-1">
             <div className="text-[10px] text-neutral-400 dark:text-gray-500 flex items-center gap-1">
-              <i className="bx bx-notepad text-xs"></i>
+              <i aria-hidden="true" className="bx bx-notepad text-xs"></i>
               หมายเหตุ: {booking.admin_notes}
             </div>
           </div>
@@ -617,26 +625,26 @@ export default function BookingDetailModal({
             // still waits on signatures and must not offer "คืนรถ" instead.
             <button onClick={() => onAdminApprove(booking.id)}
               className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 active:from-brand-700 active:to-brand-600 shadow-md shadow-brand-200/50 hover:shadow-lg transition-all">
-              <i className="bx bx-pen text-sm"></i>
+              <i aria-hidden="true" className="bx bx-pen text-sm"></i>
               เซ็นเอกสาร
             </button>
           ) : canManageBookings && booking.status === 'pending' ? (
             <div className="flex gap-2">
               <button onClick={() => onAdminApprove(booking.id)}
                 className="flex-1 h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:from-emerald-700 active:to-emerald-600 shadow-md shadow-emerald-200/50 hover:shadow-lg transition-all">
-                <i className="bx bx-check text-sm"></i>
+                <i aria-hidden="true" className="bx bx-check text-sm"></i>
                 อนุมัติ
               </button>
               <button onClick={onOpenRejectModal}
                 className="flex-1 h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-900/20 active:bg-rose-100 transition-all">
-                <i className="bx bx-x text-sm"></i>
+                <i aria-hidden="true" className="bx bx-x text-sm"></i>
                 ปฏิเสธ
               </button>
             </div>
           ) : canManageBookings && booking.status === 'approved' ? (
             <button onClick={() => onAdminReturn(booking.id)}
               className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 shadow-md shadow-blue-200/50 hover:shadow-lg transition-all">
-              <i className="bx bx-refresh text-sm"></i>
+              <i aria-hidden="true" className="bx bx-refresh text-sm"></i>
               คืนรถ
             </button>
           ) : publicMode && booking.status === 'approved' ? (
@@ -644,7 +652,7 @@ export default function BookingDetailModal({
               {returnPhone !== 'show' ? (
                 <button onClick={() => setReturnPhone('show')}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 active:from-blue-700 active:to-blue-600 shadow-md shadow-blue-200/50 hover:shadow-lg transition-all">
-                  <i className="bx bx-refresh text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-refresh text-sm"></i>
                   คืนรถ
                 </button>
               ) : (
@@ -657,7 +665,7 @@ export default function BookingDetailModal({
                   }, 250)
                 }}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-neutral-500 dark:text-gray-400 border border-neutral-200 dark:border-gray-600 hover:bg-neutral-100 dark:hover:bg-gray-700 active:bg-neutral-200 transition-all">
-                  <i className="bx bx-chevron-left text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-chevron-left text-sm"></i>
                   กลับ
                 </button>
               )}
@@ -667,7 +675,7 @@ export default function BookingDetailModal({
               {cancelPhone !== 'show' ? (
                 <button onClick={() => setCancelPhone('show')}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 active:from-rose-700 active:to-rose-600 shadow-md shadow-rose-200/50 hover:shadow-lg transition-all">
-                  <i className="bx bx-x-circle text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-x-circle text-sm"></i>
                   ยกเลิกการจอง
                 </button>
               ) : (
@@ -680,7 +688,7 @@ export default function BookingDetailModal({
                   }, 250)
                 }}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-neutral-500 dark:text-gray-400 border border-neutral-200 dark:border-gray-600 hover:bg-neutral-100 dark:hover:bg-gray-700 active:bg-neutral-200 transition-all">
-                  <i className="bx bx-chevron-left text-sm"></i>
+                  <i aria-hidden="true" className="bx bx-chevron-left text-sm"></i>
                   กลับ
                 </button>
               )}
@@ -688,7 +696,7 @@ export default function BookingDetailModal({
           ) : (
             <button onClick={onClose}
               className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-neutral-500 dark:text-gray-400 border border-neutral-200 dark:border-gray-600 hover:bg-neutral-100 dark:hover:bg-gray-700 active:bg-neutral-200 transition-all">
-              <i className="bx bx-x text-sm"></i>
+              <i aria-hidden="true" className="bx bx-x text-sm"></i>
               ปิด
             </button>
           )}

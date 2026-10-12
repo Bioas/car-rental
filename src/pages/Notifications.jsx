@@ -51,7 +51,7 @@ function FilterButton({ active, onClick, icon, iconClass, label, count, unread }
         ? 'bg-brand-50 dark:bg-brand-900/25 text-brand-700 dark:text-brand-300 font-semibold'
         : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/60'}`}>
       <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconClass}`}>
-        <i className={`bx ${icon} text-base`}></i>
+        <i aria-hidden="true" className={`bx ${icon} text-base`}></i>
       </span>
       <span className="flex-1 text-left truncate">{label}</span>
       {unread > 0 && <span className="w-2 h-2 rounded-full bg-brand-500" title={`ยังไม่ได้อ่าน ${unread}`} />}
@@ -245,11 +245,11 @@ export default function Notifications() {
         <div className="flex gap-2">
           <button type="button" onClick={readAll} disabled={!unread || busy}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            <i className="bx bx-check-double text-base"></i> อ่านทั้งหมด
+            <i aria-hidden="true" className="bx bx-check-double text-base"></i> อ่านทั้งหมด
           </button>
           <button type="button" onClick={clearRead} disabled={!readCount || busy}
             className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-xl text-sm font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-            <i className="bx bx-trash text-base"></i> ล้างที่อ่านแล้ว
+            <i aria-hidden="true" className="bx bx-trash text-base"></i> ล้างที่อ่านแล้ว
           </button>
         </div>
       </div>
@@ -263,7 +263,7 @@ export default function Notifications() {
                 <button key={label} type="button" onClick={() => setOnlyUnread(v)} aria-pressed={onlyUnread === v}
                   className={`h-8 px-3 rounded-lg text-xs font-semibold transition-colors ${onlyUnread === v
                     ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
                   {label}{v && unread > 0 ? ` (${unread})` : ''}
                 </button>
               ))}
@@ -274,7 +274,7 @@ export default function Notifications() {
                   className={`h-8 px-3 inline-flex items-center gap-1.5 rounded-lg text-xs font-semibold transition-colors ${type === f.key
                     ? 'bg-brand-600 text-white'
                     : 'bg-white dark:bg-gray-800/50 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700'}`}>
-                  <i className={`bx ${f.icon} text-sm`}></i>{f.label}
+                  <i aria-hidden="true" className={`bx ${f.icon} text-sm`}></i>{f.label}
                   <span className={type === f.key ? 'text-white/70' : 'text-gray-400'}>{f.count}</span>
                 </button>
               ))}
@@ -286,7 +286,7 @@ export default function Notifications() {
             <div className="card py-16 flex items-center justify-center">
               <div className="text-center max-w-xs mx-auto px-4">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center">
-                  <i className={`bx ${onlyUnread ? 'bxs-check-circle text-emerald-500' : 'bx-bell text-gray-300 dark:text-gray-600'} text-3xl`}></i>
+                  <i aria-hidden="true" className={`bx ${onlyUnread ? 'bxs-check-circle text-emerald-500' : 'bx-bell text-gray-300 dark:text-gray-600'} text-3xl`}></i>
                 </div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
                   {onlyUnread ? 'อ่านครบทุกรายการแล้ว' : counts.all === 0 ? 'ยังไม่มีการแจ้งเตือน' : `ไม่มีการแจ้งเตือนประเภท "${activeLabel}"`}
@@ -314,7 +314,7 @@ export default function Notifications() {
                     <li key={n.id} className={`group relative flex items-start gap-3 sm:gap-4 px-4 py-3.5 transition-colors ${isUnread ? 'bg-brand-50/50 dark:bg-brand-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-800/40'}`}>
                       {isUnread && <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-r bg-brand-500" aria-hidden="true" />}
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${t.color}`}>
-                        <i className={`bx ${t.icon} text-xl`}></i>
+                        <i aria-hidden="true" className={`bx ${t.icon} text-xl`}></i>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 text-[11px]">
@@ -332,15 +332,15 @@ export default function Notifications() {
                         {n.related_type === 'booking' && n.related_id && (
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
                             <button type="button" onClick={() => openRelated(n)} disabled={opening === n.id}
-                              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-60">
-                              {opening === n.id ? <i className="bx bx-loader-alt animate-spin text-sm"></i> : <i className="bx bx-file text-sm"></i>}
+                              className="inline-flex items-center gap-1 min-h-[36px] text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline disabled:opacity-60">
+                              {opening === n.id ? <i aria-hidden="true" className="bx bx-loader-alt animate-spin text-sm"></i> : <i aria-hidden="true" className="bx bx-file text-sm"></i>}
                               ดูคำขอ
                             </button>
                             {/* Signing happens on คำขอจอง, where the sign modal lives. */}
                             {n.type === 'sign_request' && isUnread && (
                               <Link to="/app/bookings" onClick={() => markRead(n)}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline">
-                                <i className="bx bx-pen text-sm"></i> ไปเซ็นเอกสาร
+                                className="inline-flex items-center gap-1 min-h-[36px] text-xs font-semibold text-violet-600 dark:text-violet-400 hover:underline">
+                                <i aria-hidden="true" className="bx bx-pen text-sm"></i> ไปเซ็นเอกสาร
                               </Link>
                             )}
                           </div>
@@ -350,12 +350,12 @@ export default function Notifications() {
                         {isUnread && (
                           <button type="button" onClick={() => markRead(n)} title="ทำเครื่องหมายว่าอ่านแล้ว" aria-label="ทำเครื่องหมายว่าอ่านแล้ว"
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-brand-600 hover:bg-white dark:hover:bg-gray-700 transition-colors">
-                            <i className="bx bx-check text-lg"></i>
+                            <i aria-hidden="true" className="bx bx-check text-lg"></i>
                           </button>
                         )}
                         <button type="button" onClick={() => remove(n)} title="ลบ" aria-label="ลบการแจ้งเตือน"
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-white dark:hover:bg-gray-700 transition-colors">
-                          <i className="bx bx-trash text-base"></i>
+                          <i aria-hidden="true" className="bx bx-trash text-base"></i>
                         </button>
                       </div>
                     </li>
@@ -369,7 +369,7 @@ export default function Notifications() {
             <div className="flex justify-center mt-6">
               <button type="button" onClick={loadMore} disabled={loadingMore}
                 className="h-10 px-5 inline-flex items-center gap-2 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60 transition-colors">
-                {loadingMore ? <i className="bx bx-loader-alt animate-spin"></i> : <i className="bx bx-chevron-down"></i>}
+                {loadingMore ? <i aria-hidden="true" className="bx bx-loader-alt animate-spin"></i> : <i aria-hidden="true" className="bx bx-chevron-down"></i>}
                 โหลดเพิ่ม
               </button>
             </div>
@@ -377,7 +377,7 @@ export default function Notifications() {
         </div>
 
         {/* Side panel (lg+): type filters with counts, unread markers */}
-        <aside className="hidden lg:block sticky top-24 space-y-4">
+        <aside aria-label="สรุปการแจ้งเตือน" className="hidden lg:block sticky top-24 space-y-4">
           <div className="card p-2">
             <p className="px-3 pt-2 pb-1.5 text-[11px] font-semibold text-gray-400 dark:text-gray-500">ประเภท</p>
             {typeFilters.map(f => (
@@ -387,7 +387,7 @@ export default function Notifications() {
           </div>
           <div className="card p-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
             <p className="font-semibold text-gray-700 dark:text-gray-200 mb-1 flex items-center gap-1.5">
-              <i className="bx bx-info-circle text-sm"></i> เคล็ดลับ
+              <i aria-hidden="true" className="bx bx-info-circle text-sm"></i> เคล็ดลับ
             </p>
             กด "ดูคำขอ" เพื่อเปิดรายละเอียดคำขอและเอกสาร · ชี้ที่เวลาเพื่อดูวันเวลาเต็ม
           </div>

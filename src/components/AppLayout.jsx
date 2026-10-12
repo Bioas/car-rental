@@ -10,13 +10,15 @@ export function AppLayout() {
   const { sidebarOpen, toggleSidebar, globalToast, setGlobalToast } = useApp()
 
   return (
-    // One flat background shared by the page, navbar and sidebar (like
-    // YouTube) so the shell reads as a single surface; cards sit on top of it.
-    <div className="min-h-screen flex bg-white dark:bg-surface-dark transition-colors duration-300">
+    // One background shared by the page, navbar and sidebar so the shell reads
+    // as a single surface — the same soft gradient as the public pages. Cards
+    // sit on top of it.
+    <div className="min-h-screen flex bg-gradient-to-br from-gray-50 via-white to-brand-50 dark:from-gray-950 dark:via-gray-900 dark:to-brand-950 transition-colors duration-300">
+      <a href="#main-content" className="skip-link">ข้ามไปที่เนื้อหาหลัก</a>
       <Sidebar />
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
         <Navbar />
-        <main className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 min-w-0">
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col p-4 sm:p-6 lg:p-8 min-w-0 focus:outline-none">
           <Outlet />
         </main>
       </div>

@@ -56,7 +56,7 @@ function Delta({ now, before, unit = '%', invert = false }) {
   const good = invert ? !up : up
   return (
     <span className={`inline-flex items-center gap-0.5 ${good ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-      <i className={`bx ${up ? 'bx-up-arrow-alt' : 'bx-down-arrow-alt'} text-sm`}></i>
+      <i aria-hidden="true" className={`bx ${up ? 'bx-up-arrow-alt' : 'bx-down-arrow-alt'} text-sm`}></i>
       {Math.abs(diff)}{unit === 'pt' ? ' จุด' : '%'}
       <span className="text-gray-400 dark:text-gray-500 ml-1">จากช่วงก่อน</span>
     </span>
@@ -67,7 +67,7 @@ function Kpi({ icon, label, value, sub, delta }) {
   return (
     <div className="card p-4 sm:p-5 flex flex-col gap-1 min-w-0">
       <div className="flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-        <i className={`bx ${icon} text-base text-brand-500`}></i>
+        <i aria-hidden="true" className={`bx ${icon} text-base text-brand-500`}></i>
         <span className="truncate">{label}</span>
       </div>
       <p className="text-2xl sm:text-3xl font-bold font-heading text-gray-900 dark:text-white tabular-nums">{value}</p>
@@ -88,7 +88,7 @@ function Panel({ title, description, onExport, className = '', children }) {
         {onExport && (
           <button type="button" onClick={onExport} title="ส่งออกตารางนี้เป็น CSV"
             className="shrink-0 inline-flex items-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            <i className="bx bx-download text-sm"></i> CSV
+            <i aria-hidden="true" className="bx bx-download text-sm"></i> CSV
           </button>
         )}
       </div>
@@ -146,14 +146,14 @@ function ExportMenu({ onExportAll, items }) {
     <div className="relative" ref={ref}>
       <button type="button" onClick={() => setOpen(o => !o)} aria-haspopup="menu" aria-expanded={open}
         className="h-10 px-4 inline-flex items-center gap-2 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-md shadow-brand-500/20 transition-colors">
-        <i className="bx bx-export text-base"></i> ส่งออกข้อมูล
-        <i className={`bx bx-chevron-down text-base transition-transform ${open ? 'rotate-180' : ''}`}></i>
+        <i aria-hidden="true" className="bx bx-export text-base"></i> ส่งออกข้อมูล
+        <i aria-hidden="true" className={`bx bx-chevron-down text-base transition-transform ${open ? 'rotate-180' : ''}`}></i>
       </button>
       {open && (
         <div role="menu" className="absolute right-0 mt-2 w-72 z-30 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl p-2 motion-safe:animate-scale-in">
           <button role="menuitem" type="button" onClick={() => { setOpen(false); onExportAll() }}
             className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/20 flex gap-3">
-            <i className="bx bx-spreadsheet text-xl text-brand-600 dark:text-brand-400 mt-0.5"></i>
+            <i aria-hidden="true" className="bx bx-spreadsheet text-xl text-brand-600 dark:text-brand-400 mt-0.5"></i>
             <span>
               <span className="block text-sm font-semibold text-gray-900 dark:text-white">รายการคำขอทั้งหมด</span>
               <span className="block text-[11px] text-gray-500 dark:text-gray-400">ทุกคำขอในช่วงเวลานี้ พร้อมรายละเอียด (CSV)</span>
@@ -163,7 +163,7 @@ function ExportMenu({ onExportAll, items }) {
           {items.map(it => (
             <button key={it.label} role="menuitem" type="button" onClick={() => { setOpen(false); it.run() }}
               className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60 flex items-center gap-2.5">
-              <i className={`bx ${it.icon} text-base text-gray-400`}></i>{it.label}
+              <i aria-hidden="true" className={`bx ${it.icon} text-base text-gray-400`}></i>{it.label}
             </button>
           ))}
           <p className="px-3 pt-2 text-[10px] text-gray-400">ไฟล์ CSV เปิดด้วย Excel หรือ Google Sheets ได้ทันที</p>
@@ -263,24 +263,29 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-6" role="group" aria-label="ช่วงเวลารายงาน">
-        {PRESETS.map(pr => (
-          <button key={pr.key} type="button" onClick={() => setPreset(pr.key)} aria-pressed={preset === pr.key}
-            className={`h-9 px-3.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${preset === pr.key
-              ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
-              : 'bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-            {pr.label}
-          </button>
-        ))}
+      {/* Range presets: one sideways-scrolling row on phones, wrapping from sm up.
+          The custom date inputs sit on their own line on phones so they never
+          scroll out of view. */}
+      <div className="mb-6 sm:flex sm:flex-wrap sm:items-center sm:gap-2">
+        <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-4 px-4 pb-1 sm:mx-0 sm:px-0 sm:pb-0 sm:overflow-visible sm:flex-wrap" role="group" aria-label="ช่วงเวลารายงาน">
+          {PRESETS.map(pr => (
+            <button key={pr.key} type="button" onClick={() => setPreset(pr.key)} aria-pressed={preset === pr.key}
+              className={`shrink-0 h-9 px-3.5 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${preset === pr.key
+                ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
+                : 'bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+              {pr.label}
+            </button>
+          ))}
+        </div>
         {preset === 'custom' && (
-          <div className="flex items-center gap-2 ml-1">
+          <div className="flex items-center gap-2 mt-3 sm:mt-0 sm:ml-1">
             <input type="date" value={custom[0]} max={custom[1]} aria-label="ตั้งแต่วันที่"
               onChange={e => setCustom(c => [e.target.value, c[1]])}
-              className="h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100" />
+              className="h-9 flex-1 sm:flex-none min-w-0 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100" />
             <span className="text-gray-400">–</span>
             <input type="date" value={custom[1]} min={custom[0]} aria-label="ถึงวันที่"
               onChange={e => setCustom(c => [c[0], e.target.value])}
-              className="h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100" />
+              className="h-9 flex-1 sm:flex-none min-w-0 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100" />
           </div>
         )}
       </div>

@@ -13,6 +13,7 @@ const { resolvePaperSigners } = require('../lib/paper-signers.cjs')
 const { getDocSettings, formatDocLabel, checkBookingRules } = require('../lib/doc-settings.cjs')
 const { carText, notifyStageSigners } = require('../lib/notify.cjs')
 const { joinNamePrefix } = require('../lib/names.cjs')
+const { parseBookingTimes, findClash, spansOverlap } = require('../lib/booking-time.cjs')
 
 // A data: URI image, capped well above anything a signature pad or a phone
 // photo of a signature needs — guards against someone posting an enormous
@@ -58,12 +59,15 @@ function serializePublicCar(car, activeCount, upcomingCount) {
 
 router.get('/cars', async (req, res) => {
   try {
-    const { start_date, end_date } = req.query
+    const { start_date, end_date, start_time, end_time } = req.query
     const now = today()
 
     if (start_date && end_date && (!isValidDate(start_date) || !isValidDate(end_date))) {
       return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD)' })
     }
+    // Times are optional: without them the whole days are checked.
+    const times = start_date && end_date ? parseBookingTimes({ start_date, end_date, start_time, end_time }) : {}
+    if (times.error) return res.status(400).json({ error: times.error })
 
     // One projected scan of the booking rows serves both the date-range clash
     // filter and the active/upcoming counters — previously these were two
@@ -71,7 +75,7 @@ router.get('/cars', async (req, res) => {
     const [cars, bookings] = await Promise.all([
       find(collections.cars, { status: 'available' }, { sort: { brand: 1, model: 1 } }),
       find(collections.bookings, { status: { $in: ['approved', 'pending'] } }, {
-        projection: { car_id: 1, start_date: 1, end_date: 1 },
+        projection: { car_id: 1, start_date: 1, end_date: 1, start_time: 1, end_time: 1 },
       }),
     ])
 
@@ -79,7 +83,7 @@ router.get('/cars', async (req, res) => {
     if (start_date && end_date) {
       const busy = new Set(
         bookings
-          .filter((b) => b.start_date <= end_date && b.end_date >= start_date)
+          .filter((b) => spansOverlap(b, { start_date, end_date, ...times }))
           .map((b) => str(b.car_id))
       )
       visibleCars = cars.filter((c) => !busy.has(str(c._id)))
@@ -146,6 +150,8 @@ router.get('/calendar', async (req, res) => {
         car_id: str(b.car_id),
         start_date: b.start_date,
         end_date: b.end_date,
+        start_time: b.start_time || '',
+        end_time: b.end_time || '',
         purpose: b.purpose || '',
         destination_place: b.destination_place || '',
         destination_district: b.destination_district || '',
@@ -208,6 +214,8 @@ router.post('/bookings/lookup', async (req, res) => {
         car_id: str(b.car_id),
         start_date: b.start_date,
         end_date: b.end_date,
+        start_time: b.start_time || '',
+        end_time: b.end_time || '',
         purpose: b.purpose || '',
         destination_place: b.destination_place || '',
         destination_district: b.destination_district || '',
@@ -388,7 +396,7 @@ router.post('/bookings/:id/cancel', async (req, res) => {
 router.post('/bookings', async (req, res) => {
   try {
     const {
-      name, prefix, phone, position, car_id, start_date, end_date, purpose, signature,
+      name, prefix, phone, position, car_id, start_date, end_date, start_time, end_time, purpose, signature,
       destination_place, destination_district, destination_province, attendees,
     } = req.body
     // Title (นาย/นาง/นางสาว) folded into the stored display name — see the
@@ -410,6 +418,8 @@ router.post('/bookings', async (req, res) => {
     if (start_date > end_date) {
       return res.status(400).json({ error: 'วันที่เริ่มต้นต้องมาก่อนวันที่สิ้นสุด' })
     }
+    const times = parseBookingTimes({ start_date, end_date, start_time, end_time })
+    if (times.error) return res.status(400).json({ error: times.error })
     const docSettings = await getDocSettings()
     const ruleError = checkBookingRules(start_date, end_date, docSettings)
     if (ruleError) return res.status(400).json({ error: ruleError })
@@ -428,14 +438,9 @@ router.post('/bookings', async (req, res) => {
         throw httpError(400, 'รถยนต์นี้ไม่พร้อมให้เช่า')
       }
 
-      const overlap = await findOne(collections.bookings, {
-        car_id: car._id,
-        status: { $in: ['approved', 'pending'] },
-        start_date: { $lte: end_date },
-        end_date: { $gte: start_date },
-      })
+      const overlap = await findClash(car._id, { start_date, end_date, ...times })
       if (overlap) {
-        throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันที่เลือกแล้ว')
+        throw httpError(409, 'รถยนต์นี้ถูกจองในช่วงวันและเวลาที่เลือกแล้ว')
       }
 
       // The borrower is not a user account — their name/phone are stored
@@ -450,6 +455,8 @@ router.post('/bookings', async (req, res) => {
         car_id: car._id,
         start_date,
         end_date,
+        start_time: times.start_time,
+        end_time: times.end_time,
         purpose: purpose || '',
         destination_place: destination_place || '',
         destination_district: destination_district || '',

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import { apiGet, invalidateApi } from '../lib/apiCache'
-import { STATUS_COLORS, effectiveStatus, signStatus, todayStr } from '../lib/constants'
+import { STATUS_COLORS, effectiveStatus, signStatus, todayStr, formatTime, formatBookingRange } from '../lib/constants'
 import { BookingModal } from '../components/BookingModal'
 import BookingDetailModal from '../components/BookingDetailModal'
 import ApproveBookingModal from '../components/ApproveBookingModal'
@@ -10,6 +10,7 @@ import { Toast } from '../components/ui/toast'
 import { CalendarMonthGrid } from '../components/CalendarMonthGrid'
 import { Skeleton } from '../components/ui/skeleton'
 import '../styles/calendar-overrides.css'
+import { useDialog, dialogProps } from '../lib/useDialog'
 
 const THAI_MONTHS = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม']
 const DAY_HEADERS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
@@ -125,7 +126,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           }
         })
       if (bars.length > 1) {
-        const sorted = [...bars].sort((a, b) => a.barStart - b.barStart)
+        const sorted = [...bars].sort((a, b) => a.barStart - b.barStart || (a.start_time || '').localeCompare(b.start_time || ''))
         const tracks = []
         for (const b of sorted) {
           let placed = false
@@ -387,6 +388,9 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
     setDetailBooking(null)
   }
 
+  const rejectRef = useRef(null)
+  useDialog(rejectModal.open, () => setRejectModal({ open: false, reason: '' }), rejectRef)
+
   if (loading) {
     return (
       <div className="animate-fade-in flex flex-col h-full">
@@ -423,7 +427,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           {canManageBookings && (
           <button onClick={() => openBooking(todayStr(), null)}
             className="inline-flex items-center justify-center gap-1.5 sm:gap-2 h-9 sm:h-10 px-3 sm:px-5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 active:from-brand-600 active:to-brand-700 shadow-md shadow-brand-200/50 hover:shadow-lg hover:shadow-brand-300/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2">
-            <i className="bx bx-plus text-sm sm:text-base"></i>
+            <i aria-hidden="true" className="bx bx-plus text-sm sm:text-base"></i>
             <span className="hidden sm:inline">จองรถ</span>
           </button>
           )}
@@ -444,25 +448,25 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-4 border-b border-neutral-100 dark:border-gray-700 shrink-0">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
             <div className="flex items-center gap-0.5 sm:gap-1">
-              <button onClick={handlePrev}
-                className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
-                <i className="bx bx-chevron-left text-xs sm:text-sm"></i>
+              <button onClick={handlePrev} aria-label={viewMode === 'week' ? 'สัปดาห์ก่อนหน้า' : 'เดือนก่อนหน้า'}
+                className="h-9 w-9 rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
+                <i aria-hidden="true" className="bx bx-chevron-left text-xs sm:text-sm"></i>
               </button>
               <h2 className="text-xs sm:text-base font-bold text-neutral-800 dark:text-white min-w-[100px] sm:min-w-[160px] text-center select-none leading-tight">
                 {viewTitle}
               </h2>
-              <button onClick={handleNext}
-                className="h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
-                <i className="bx bx-chevron-right text-xs sm:text-sm"></i>
+              <button onClick={handleNext} aria-label={viewMode === 'week' ? 'สัปดาห์ถัดไป' : 'เดือนถัดไป'}
+                className="h-9 w-9 rounded-xl border border-neutral-200 dark:border-gray-600 flex items-center justify-center text-neutral-500 dark:text-gray-400 hover:bg-neutral-100 dark:hover:bg-gray-700 hover:text-neutral-700 dark:hover:text-gray-200 active:bg-neutral-200 transition-all">
+                <i aria-hidden="true" className="bx bx-chevron-right text-xs sm:text-sm"></i>
               </button>
             </div>
             <div className="flex rounded-lg sm:rounded-xl border border-neutral-200 dark:border-gray-600 overflow-hidden">
-              <button onClick={() => switchView('week')}
-                className={`px-2 sm:px-3 h-7 sm:h-9 text-[10px] sm:text-xs font-semibold transition-all ${viewMode === 'week' ? 'bg-brand-600 text-white shadow-sm' : 'text-neutral-500 dark:text-gray-400 hover:bg-neutral-50 dark:hover:bg-gray-700'}`}>
+              <button onClick={() => switchView('week')} aria-pressed={viewMode === 'week'}
+                className={`px-3 h-9 text-xs font-semibold transition-all ${viewMode === 'week' ? 'bg-brand-600 text-white shadow-sm' : 'text-neutral-500 dark:text-gray-400 hover:bg-neutral-50 dark:hover:bg-gray-700'}`}>
                 สัปดาห์
               </button>
-              <button onClick={() => switchView('month')}
-                className={`px-2 sm:px-3 h-7 sm:h-9 text-[10px] sm:text-xs font-semibold transition-all ${viewMode === 'month' ? 'bg-brand-600 text-white shadow-sm' : 'text-neutral-500 dark:text-gray-400 hover:bg-neutral-50 dark:hover:bg-gray-700'}`}>
+              <button onClick={() => switchView('month')} aria-pressed={viewMode === 'month'}
+                className={`px-3 h-9 text-xs font-semibold transition-all ${viewMode === 'month' ? 'bg-brand-600 text-white shadow-sm' : 'text-neutral-500 dark:text-gray-400 hover:bg-neutral-50 dark:hover:bg-gray-700'}`}>
                 เดือน
               </button>
             </div>
@@ -489,7 +493,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
           <div ref={weekContainerRef} className="overflow-x-auto flex-1 min-h-[400px] flex flex-col week-view-enter">
             {visibleCars.length === 0 ? (
               <div className="text-center py-16 px-4">
-                <i className="bx bx-calendar text-4xl mx-auto mb-3 text-neutral-300"></i>
+                <i aria-hidden="true" className="bx bx-calendar text-4xl mx-auto mb-3 text-neutral-300"></i>
                 <h3 className="text-base font-semibold text-neutral-700 dark:text-gray-300 mb-1">ไม่มีรถยนต์</h3>
                 <p className="text-sm text-neutral-400">กรุณาเพิ่มรถยนต์ก่อน</p>
               </div>
@@ -504,9 +508,9 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                       <div key={d.dateStr} style={{ '--delay': `${i * 0.04}s` }}
                         className={`px-0.5 sm:px-1 py-2 sm:py-3 border-b border-r border-neutral-100/30 dark:border-gray-700/30 text-center font-medium transition-colors week-day-header ${
                           d.isToday ? 'bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300 font-bold' : 'text-neutral-500 dark:text-gray-400'
-                        } ${d.dayOfWeek === 0 ? 'text-rose-400' : ''}`}>
+                        } ${d.dayOfWeek === 0 ? '!text-rose-600 dark:!text-rose-400' : ''}`}>
                         <div className="text-xs sm:text-base">{d.day}</div>
-                        <div className="text-[8px] sm:text-[10px] opacity-60">{DAY_HEADERS[d.dayOfWeek]}</div>
+                        <div className="text-[10px]">{DAY_HEADERS[d.dayOfWeek]}</div>
                       </div>
                     ))}
                   </div>
@@ -519,7 +523,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                         <div className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-2 sm:px-3 border-b border-r border-neutral-100/30 dark:border-gray-700/30 flex items-center h-full">
                           <div className="min-w-0">
                             <div className="text-xs sm:text-sm font-medium text-neutral-800 dark:text-gray-100 leading-tight">{car.license_plate || `${car.brand} ${car.model}`}</div>
-                            {car.license_plate && <div className="text-[9px] sm:text-[10px] text-neutral-400 dark:text-gray-500 truncate">{car.brand} {car.model}</div>}
+                            {car.license_plate && <div className="text-[10px] text-neutral-400 dark:text-gray-500 truncate">{car.brand} {car.model}</div>}
                           </div>
                         </div>
                         <div className="relative col-span-full h-full" style={{ gridColumn: '2 / 9' }}>
@@ -566,6 +570,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                             const statusColor = STATUS_COLORS[status] || '#6b7280'
                             return (
                               <div key={b.id}
+                                title={`${b.user_name} · ${formatBookingRange(b)}`}
                                 onClick={() => setDetailBooking(prev => (prev && prev.id === b.id ? prev : b))}
                                 className="absolute rounded flex items-center gap-1.5 px-2 cursor-pointer transition-all overflow-hidden z-20 border border-white/20 week-booking-bar"
                                 style={{
@@ -626,7 +631,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                                   }}
                                   title={statusText}
                                 />
-                                <span className="cal-bar-label min-w-0 truncate text-xs font-medium text-white flex-1">{b.user_name}</span>
+                                <span className="cal-bar-label min-w-0 truncate text-xs font-medium text-white flex-1">{b.start_time && new Date(b.start_date) >= weekStart ? `${formatTime(b.start_time)} ` : ''}{b.user_name}</span>
                                 {/* TRAILING STATUS WORD — desktop only. Hidden
                                     below sm (640px) because the top 3px
                                     status accent already encodes status via
@@ -640,7 +645,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
                                     glance-readability. whitespace-nowrap
                                     keeps "อนุมัติแล้ว" on one line so the
                                     trailing right edge feels anchored. */}
-                                <span className="cal-bar-label hidden sm:inline shrink-0 text-[9px] font-medium text-white/80 whitespace-nowrap">{statusText}</span>
+                                <span className="cal-bar-label hidden sm:inline shrink-0 text-[9px] font-medium text-white whitespace-nowrap">{statusText}</span>
                               </div>
                             )
                           })}
@@ -703,7 +708,7 @@ export default function CalendarPage({ publicMode, onDateClick, embedded }) {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           onClick={() => setRejectModal({ open: false, reason: '' })}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-gray-700 w-full max-w-sm max-h-[70vh] overflow-y-auto scrollbar-none animate-fade-in sm:max-h-none sm:overflow-hidden"
+          <div ref={rejectRef} {...dialogProps('ปฏิเสธคำขอยืม')} className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-neutral-200 dark:border-gray-700 w-full max-w-sm max-h-[70vh] overflow-y-auto scrollbar-none animate-fade-in sm:max-h-none sm:overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-neutral-100 dark:border-gray-700">
               <h3 className="font-bold text-neutral-800 dark:text-white text-base">ปฏิเสธคำขอยืม</h3>

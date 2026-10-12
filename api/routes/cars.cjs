@@ -82,6 +82,8 @@ router.get('/:id', authMiddleware, async (req, res) => {
       car_id: str(b.car_id),
       start_date: b.start_date,
       end_date: b.end_date,
+      start_time: b.start_time || '',
+      end_time: b.end_time || '',
       purpose: b.purpose || '',
       status: b.status,
       admin_notes: b.admin_notes || '',

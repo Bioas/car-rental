@@ -34,7 +34,7 @@ function Section({ id, icon, title, description, children, footer }) {
     <section id={id} className="card scroll-mt-24">
       <header className="px-5 sm:px-6 pt-5 pb-4 border-b border-border-light/60 dark:border-border-dark/60 flex items-start gap-3">
         <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-300 flex items-center justify-center shrink-0">
-          <i className={`bx ${icon} text-lg`}></i>
+          <i aria-hidden="true" className={`bx ${icon} text-lg`}></i>
         </div>
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
@@ -89,7 +89,7 @@ function DocumentPreview({ header, docNumber, refNo, titles, paper, stages }) {
     <div className="card p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-          <i className="bx bx-show text-sm"></i> ตัวอย่างหัวเอกสาร
+          <i aria-hidden="true" className="bx bx-show text-sm"></i> ตัวอย่างหัวเอกสาร
         </span>
         <span className="text-[10px] text-gray-400 dark:text-gray-500">อัปเดตตามที่พิมพ์</span>
       </div>
@@ -122,7 +122,7 @@ function DocumentPreview({ header, docNumber, refNo, titles, paper, stages }) {
                   )}
                   {onPaper && (
                     <span className="block text-sky-600 dark:text-sky-400">
-                      <i className="bx bx-printer align-[-1px]"></i> เซ็นบนกระดาษ{name ? ` · (${name})` : ''}
+                      <i aria-hidden="true" className="bx bx-printer align-[-1px]"></i> เซ็นบนกระดาษ{name ? ` · (${name})` : ''}
                     </span>
                   )}
                 </span>
@@ -393,7 +393,7 @@ export default function DocumentSettings() {
           )}
           {reusesNumbers && (
             <p className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-xs text-amber-700 dark:text-amber-300 flex gap-2">
-              <i className="bx bx-error text-sm shrink-0"></i>
+              <i aria-hidden="true" className="bx bx-error text-sm shrink-0"></i>
               <span>มีคำขอที่ใช้เลขที่ถึง {counter.highest_used} แล้ว ถ้าเริ่มที่ {nextNum} เลขที่จะซ้ำกับของเดิม (เหมาะกับการเริ่มนับใหม่ เช่น ขึ้นปีงบประมาณใหม่)</span>
             </p>
           )}
@@ -405,7 +405,7 @@ export default function DocumentSettings() {
           footer={<SaveButton dirty={signersDirty} saving={saving === 'titles'} onClick={saveSigners} />}>
           {staff.length === 0 && (
             <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
-              <i className="bx bx-info-circle text-base shrink-0"></i>
+              <i aria-hidden="true" className="bx bx-info-circle text-base shrink-0"></i>
               ยังไม่มีบัญชีเจ้าหน้าที่ในระบบ กรุณาเพิ่มในแท็บ "ผู้ใช้" ก่อน
             </div>
           )}
@@ -447,10 +447,10 @@ export default function DocumentSettings() {
                         return (
                           <button key={opt.label} type="button" role="radio" aria-checked={active}
                             onClick={() => togglePaper(stage.key, opt.value)}
-                            className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-md transition-colors ${active
+                            className={`inline-flex items-center gap-1 h-9 sm:h-7 px-3 sm:px-2.5 rounded-md transition-colors ${active
                               ? `bg-white dark:bg-gray-700 shadow-sm ${opt.on}`
-                              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-                            <i className={`bx ${opt.icon} text-sm`}></i>{opt.label}
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'}`}>
+                            <i aria-hidden="true" className={`bx ${opt.icon} text-sm`}></i>{opt.label}
                           </button>
                         )
                       })}
@@ -471,7 +471,7 @@ export default function DocumentSettings() {
           )}
           {!allPaper && Object.keys(paper).length > 0 && (
             <p className="mt-4 p-3 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800/50 text-xs text-sky-700 dark:text-sky-300 flex gap-2">
-              <i className="bx bx-info-circle text-sm shrink-0"></i>
+              <i aria-hidden="true" className="bx bx-info-circle text-sm shrink-0"></i>
               <span>
                 คำขอจะอนุมัติในระบบเมื่อขั้นที่เซ็นในระบบเซ็นครบ จากนั้นพิมพ์ PDF ไปให้ขั้นที่เซ็นบนกระดาษลงนาม
                 {'deputy_director' in paper && 'director' in paper && ' · ทั้งสองขั้นที่ "ไม่อนุญาต" ได้เซ็นบนกระดาษ จึงไม่มีใครกดไม่อนุญาตในระบบได้'}
@@ -512,16 +512,16 @@ export default function DocumentSettings() {
               <li key={p} className="group inline-flex items-center gap-1 h-9 pl-3 pr-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-100">
                 <span className="mr-1">{p}</span>
                 <button type="button" onClick={() => movePrefix(i, -1)} disabled={i === 0} aria-label={`เลื่อน ${p} ขึ้น`}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:pointer-events-none">
-                  <i className="bx bx-chevron-left text-base"></i>
+                  className="w-8 h-8 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:pointer-events-none">
+                  <i aria-hidden="true" className="bx bx-chevron-left text-base"></i>
                 </button>
                 <button type="button" onClick={() => movePrefix(i, 1)} disabled={i === prefixes.length - 1} aria-label={`เลื่อน ${p} ลง`}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:pointer-events-none">
-                  <i className="bx bx-chevron-right text-base"></i>
+                  className="w-8 h-8 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:pointer-events-none">
+                  <i aria-hidden="true" className="bx bx-chevron-right text-base"></i>
                 </button>
                 <button type="button" onClick={() => setPrefixes(list => list.filter(x => x !== p))} aria-label={`ลบ ${p}`}
-                  className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30">
-                  <i className="bx bx-x text-base"></i>
+                  className="w-8 h-8 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30">
+                  <i aria-hidden="true" className="bx bx-x text-base"></i>
                 </button>
               </li>
             ))}
@@ -533,7 +533,7 @@ export default function DocumentSettings() {
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPrefix() } }} />
             <button type="button" onClick={addPrefix} disabled={!trimmedNewPrefix || prefixDuplicate}
               className="h-11 px-4 rounded-xl text-sm font-semibold text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/30 hover:bg-brand-100 dark:hover:bg-brand-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-1">
-              <i className="bx bx-plus text-base"></i> เพิ่ม
+              <i aria-hidden="true" className="bx bx-plus text-base"></i> เพิ่ม
             </button>
           </div>
           {prefixDuplicate && <p className="text-xs text-red-500 dark:text-red-400 mt-1.5">มีคำนำหน้านี้อยู่แล้ว</p>}
@@ -551,13 +551,13 @@ export default function DocumentSettings() {
 
       {/* Right rail (wide screens): jump links with unsaved markers, a live
           preview of the document header, and the loan rules at a glance. */}
-      <aside className="hidden xl:flex flex-col gap-4 sticky top-24">
+      <aside aria-label="สารบัญและตัวอย่างเอกสาร" className="hidden xl:flex flex-col gap-4 sticky top-24">
         <nav aria-label="ส่วนของการตั้งค่าเอกสาร" className="card p-2">
           {navItems.map(item => (
             <a key={item.id} href={`#${item.id}`}
               onClick={e => { e.preventDefault(); document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors">
-              <i className={`bx ${item.icon} text-base text-gray-400`}></i>
+              <i aria-hidden="true" className={`bx ${item.icon} text-base text-gray-400`}></i>
               <span className="flex-1 truncate">{item.label}</span>
               {item.dirty && <span className="w-2 h-2 rounded-full bg-amber-400" title="มีการแก้ไขที่ยังไม่บันทึก" />}
             </a>
@@ -568,7 +568,7 @@ export default function DocumentSettings() {
 
         <div className="card p-4">
           <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5">
-            <i className="bx bx-calendar-check text-sm"></i> เงื่อนไขการยืมปัจจุบัน
+            <i aria-hidden="true" className="bx bx-calendar-check text-sm"></i> เงื่อนไขการยืมปัจจุบัน
           </p>
           <ul className="space-y-1.5 text-sm">
             {RULE_FIELDS.map(f => (

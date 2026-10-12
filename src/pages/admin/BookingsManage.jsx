@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useApp } from '../../context/AppContext'
 import { apiGet, invalidateApi } from '../../lib/apiCache'
-import { signStatus, formatThaiDate, docLabel } from '../../lib/constants'
+import { signStatus, formatThaiDate, docLabel, timeRangeLabel } from '../../lib/constants'
 import { Spinner } from '../../components/ui/spinner'
 import { EmptyState } from '../../components/ui/empty-state'
 import { Toast } from '../../components/ui/toast'
 import { Pager } from '../../components/ui/pager'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
+import { StatTile, StatTileRow, SearchInput } from '../../components/ui/stat-tile'
 import ApproveBookingModal from '../../components/ApproveBookingModal'
 import SignDocumentModal from '../../components/SignDocumentModal'
 import BookingDetailModal from '../../components/BookingDetailModal'
+import { useDialog, dialogProps } from '../../lib/useDialog'
 
 const CalendarPage = lazy(() => import('../CalendarPage'))
 
@@ -17,12 +19,44 @@ const CalendarPage = lazy(() => import('../CalendarPage'))
 // shipped to the browser before the first paint.
 const PAGE_SIZE = 20
 
+// Summary tiles, each also the status filter (counts come from the server).
+const STATUS_TILES = [
+  { key: 'all', label: 'ทั้งหมด', icon: 'bx-list-ul', tone: 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300', ring: 'ring-brand-400' },
+  { key: 'pending', label: 'รออนุมัติ', icon: 'bx-time-five', tone: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300', ring: 'ring-amber-400' },
+  { key: 'awaiting_signature', label: 'รอดำเนินการ', icon: 'bx-loader-circle', tone: 'bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-300', ring: 'ring-sky-400' },
+  { key: 'approved', label: 'อนุมัติแล้ว', icon: 'bx-check-circle', tone: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300', ring: 'ring-emerald-400' },
+  { key: 'rejected', label: 'ปฏิเสธ', icon: 'bx-x-circle', tone: 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300', ring: 'ring-red-400' },
+  { key: 'returned', label: 'คืนแล้ว', icon: 'bx-revision', tone: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300', ring: 'ring-indigo-400' },
+]
+
+const EMPTY_MESSAGES = {
+  all: 'ยังไม่มีรายการขอยืมเข้ามา',
+  pending: 'ไม่มีรายการรออนุมัติ',
+  awaiting_signature: 'ไม่มีรายการรอดำเนินการ',
+  approved: 'ไม่มีรายการที่อนุมัติแล้ว',
+  rejected: 'ไม่มีรายการที่ปฏิเสธ',
+  returned: 'ไม่มีรายการที่คืนแล้ว',
+}
+
+function nameInitial(name) {
+  const bare = String(name || '').replace(/^(นาย|นางสาว|นาง|ว่าที่ร้อยตรี|ดร\.)\s*/, '').trim()
+  return bare.charAt(0) || '?'
+}
+
+function dayCount(start, end) {
+  if (!start || !end) return 0
+  return Math.round((new Date(end) - new Date(start)) / 86400000) + 1
+}
+
 export default function BookingsManage() {
   const { authHeaders, fetchNotificationCount, refreshSignal, user, canManageBookings } = useApp()
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
   const [page, setPage] = useState(1)
+  // `query` follows the input; `search` is the debounced value sent to the server.
+  const [query, setQuery] = useState('')
+  const [search, setSearch] = useState('')
   const [pages, setPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [counts, setCounts] = useState({ all: 0, pending: 0, awaiting_signature: 0, approved: 0, rejected: 0, returned: 0 })
@@ -55,7 +89,15 @@ export default function BookingsManage() {
     const force = prevRefreshRef.current !== refreshSignal
     prevRefreshRef.current = refreshSignal
     fetchBookings(force)
-  }, [refreshSignal, page, activeFilter])
+  }, [refreshSignal, page, activeFilter, search])
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(query.trim())
+      setPage(1)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query])
 
   // Only a 'staff' account may sign a loan document — an admin oversees and
   // manages the system but never signs, so the queue is not even fetched for
@@ -88,8 +130,6 @@ export default function BookingsManage() {
   // Totals come from the server — the client only holds the current page.
   const pendingCount = counts.pending
   const awaitingCount = counts.awaiting_signature
-  const rejectedCount = counts.rejected
-  const returnedCount = counts.returned
   // Bookings currently waiting on this signed-in user's stage. Approving one of
   // these is the same act as signing it, so the row opens the sign modal
   // instead of the driver-assignment modal.
@@ -100,6 +140,7 @@ export default function BookingsManage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) })
       if (activeFilter !== 'all') params.set('status', activeFilter)
+      if (search) params.set('q', search)
       const res = await apiGet(`/api/admin/bookings?${params}`, { headers: authHeaders(), force })
       if (res.ok) {
         const data = res.data
@@ -211,6 +252,9 @@ export default function BookingsManage() {
     returnBooking(id)
   }
 
+  const rejectRef = useRef(null)
+  useDialog(showRejectModal, () => setShowRejectModal(false), rejectRef)
+
   if (loading) {
     return (
       <div className="animate-fade-in flex flex-col flex-1 min-h-0">
@@ -232,7 +276,7 @@ export default function BookingsManage() {
         {/* Admins only view loan requests — staff are the ones who act on them. */}
         {!canManageBookings && (
           <span className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-            <i className="bx bx-show text-sm"></i>
+            <i aria-hidden="true" className="bx bx-show text-sm"></i>
             ดูได้อย่างเดียว · การจัดการคำขอยืมเป็นหน้าที่ของเจ้าหน้าที่
           </span>
         )}
@@ -255,7 +299,7 @@ export default function BookingsManage() {
                 ? 'border-brand-600 text-brand-600 dark:text-brand-400 dark:border-brand-400'
                 : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}>
-            <i className={`bx ${tab.icon} text-base`}></i>
+            <i aria-hidden="true" className={`bx ${tab.icon} text-base`}></i>
             {tab.label}
             {tab.badge > 0 && (
               <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${viewTab === tab.key ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
@@ -273,189 +317,122 @@ export default function BookingsManage() {
       ) : (
       <>
 
-      {/* Filter chips — horizontal scroll on mobile (fade edge), plain on desktop */}
-      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1 sm:overflow-visible sm:flex-wrap sm:pb-0 sm:![mask-image:none]"
-        style={{
-          maskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)',
-        }}>
-        {[
-          { key: 'all', label: 'ทั้งหมด', count: null },
-          { key: 'pending', label: 'รออนุมัติ', count: pendingCount },
-          { key: 'awaiting_signature', label: 'รอดำเนินการ', count: awaitingCount },
-          { key: 'approved', label: 'อนุมัติแล้ว', count: null },
-          { key: 'rejected', label: 'ปฏิเสธ', count: rejectedCount },
-          { key: 'returned', label: 'คืนแล้ว', count: returnedCount },
-        ].filter(f => !(viewOnly && f.key === 'pending')).map(f => (
-          <button
-            key={f.key}
-            onClick={() => { setFilter(f.key); setPage(1) }}
-            className={`shrink-0 inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
-              activeFilter === f.key
-                ? 'bg-brand-600 text-white shadow-md shadow-brand-500/20'
-                : 'bg-white dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}>
-            {f.label}
-            {f.count !== null && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                activeFilter === f.key
-                  ? 'bg-white/20 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-              }`}>{f.count}</span>
-            )}
-          </button>
+      <StatTileRow grid={`sm:grid-cols-3 ${viewOnly ? 'lg:grid-cols-5' : 'xl:grid-cols-6'}`} className="mb-4 sm:mb-5">
+        {STATUS_TILES.filter(t => !(viewOnly && t.key === 'pending')).map(t => (
+          <StatTile key={t.key} icon={t.icon} label={t.label} value={counts[t.key] ?? 0} tone={t.tone} ring={t.ring}
+            active={activeFilter === t.key}
+            onClick={() => { setFilter(activeFilter === t.key && t.key !== 'all' ? 'all' : t.key); setPage(1) }} />
         ))}
-      </div>
+      </StatTileRow>
 
-      {/* Mobile Card View */}
-      <div className={`sm:hidden flex flex-col min-h-0 ${filteredBookings.length === 0 ? 'flex-1' : ''}`}>
-        <div className={`card p-4 divide-y divide-gray-200 dark:divide-gray-600 flex flex-col min-h-0 ${filteredBookings.length === 0 ? 'flex-1' : ''}`}>
-          {filteredBookings.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <EmptyState
-                icon="bx-calendar"
-                message={activeFilter === 'all' ? 'ยังไม่มีรายการขอยืมเข้ามา' : activeFilter === 'pending' ? 'ไม่มีรายการรออนุมัติ' : activeFilter === 'awaiting_signature' ? 'ไม่มีรายการรอดำเนินการ' : activeFilter === 'approved' ? 'ไม่มีรายการที่อนุมัติแล้ว' : activeFilter === 'rejected' ? 'ไม่มีรายการที่ปฏิเสธ' : 'ไม่มีรายการที่คืนแล้ว'}
-              />
-            </div>
-          ) : (
-            filteredBookings.map(b => (
-            <div key={b.id} onClick={() => setDetailTarget(b)}
-              className="bg-white dark:bg-card-dark py-3 first:pt-0 space-y-3 cursor-pointer">
-              {/* Header: Name + Status */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
-                      <i className="bx bx-user text-sm text-brand-600 dark:text-brand-400"></i>
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white truncate block">{b.user_name}</span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate block">{b.user_email}</span>
-                    </div>
-                  </div>
-                </div>
-                <span className={signStatus(b).className + ' shrink-0'}>{signStatus(b).label}</span>
-              </div>
-
-              {/* Details */}
-              <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-3 space-y-2">
-                <div className="flex items-center gap-2 text-sm">
-                  <i className="bx bx-car text-base text-gray-400 shrink-0"></i>
-                  <span className="text-gray-700 dark:text-gray-300 font-medium">{b.license_plate}</span>
-                  <span className="text-gray-400">·</span>
-                  <span className="text-gray-500 dark:text-gray-400 text-xs">{b.brand} {b.model}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <i className="bx bx-calendar text-base text-gray-400 shrink-0"></i>
-                  <span className="text-gray-600 dark:text-gray-400">{formatThaiDate(b.start_date)}</span>
-                  <i className="bx bx-right-arrow-alt text-xs text-gray-300"></i>
-                  <span className="text-gray-600 dark:text-gray-400">{formatThaiDate(b.end_date)}</span>
-                </div>
-                {b.purpose && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <i className="bx bx-file text-base text-gray-400 shrink-0 mt-0.5"></i>
-                    <span className="text-gray-600 dark:text-gray-400">{b.purpose}</span>
-                  </div>
-                )}
-                {(b.destination_place || b.destination_district || b.destination_province) && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <i className="bx bx-map text-base text-gray-400 shrink-0 mt-0.5"></i>
-                    <span className="text-gray-600 dark:text-gray-400">{[b.destination_place, b.destination_district, b.destination_province].filter(Boolean).join(' · ')}</span>
-                  </div>
-                )}
-                {b.attendees > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <i className="bx bx-group text-base text-gray-400 shrink-0"></i>
-                    <span className="text-gray-600 dark:text-gray-400">ผู้ไปราชการ {b.attendees} คน</span>
-                  </div>
-                )}
-                {b.doc_number && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <i className="bx bx-receipt text-base text-gray-400 shrink-0"></i>
-                    <span className="text-gray-600 dark:text-gray-400">เลขที่เอกสาร {docLabel(b)}</span>
-                  </div>
-                )}
-                {b.status === 'approved' && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <i className="bx bx-car text-base text-gray-400 shrink-0"></i>
-                    <span className="text-gray-600 dark:text-gray-400">{b.driver_name ? `พนักงานขับรถ: ${b.driver_name}` : 'ผู้ยืมขับเอง'}</span>
-                  </div>
-                )}
-                {b.admin_notes && (
-                  <div className="flex items-start gap-2 text-sm">
-                    <i className="bx bx-message-detail text-base text-gray-400 shrink-0 mt-0.5"></i>
-                    <span className="text-gray-500 dark:text-gray-400 text-xs">{b.admin_notes}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            ))
+      <div className={`card overflow-hidden flex flex-col min-h-0 ${filteredBookings.length === 0 ? 'flex-1' : ''}`}>
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-border-light/60 dark:border-border-dark/60">
+          <SearchInput value={query} onChange={setQuery} placeholder="ค้นหาชื่อผู้ยืม เบอร์โทร ทะเบียนรถ สถานที่ เลขที่" className="flex-1 min-w-[220px] max-w-lg" />
+          <span className="text-xs text-gray-400 ml-auto">
+            {search ? `พบ ${total} รายการ` : `${STATUS_TILES.find(t => t.key === activeFilter)?.label || ''} ${total} รายการ`}
+          </span>
+          {(search || activeFilter !== 'all') && (
+            <button onClick={() => { setQuery(''); setFilter('all'); setPage(1) }} className="text-xs text-brand-600 dark:text-brand-400 hover:underline min-h-[36px] px-2 -mx-2">ล้างตัวกรอง</button>
           )}
         </div>
-      </div>
 
-      {/* Desktop Table View */}
-      <div className={`hidden sm:flex card overflow-hidden flex-col min-h-0 ${filteredBookings.length === 0 ? 'flex-1' : ''}`}>
         {filteredBookings.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <EmptyState
-              icon="bx-calendar"
-              message={activeFilter === 'all' ? 'ยังไม่มีรายการขอยืมเข้ามา' : activeFilter === 'pending' ? 'ไม่มีรายการรออนุมัติ' : activeFilter === 'awaiting_signature' ? 'ไม่มีรายการรอดำเนินการ' : activeFilter === 'approved' ? 'ไม่มีรายการที่อนุมัติแล้ว' : activeFilter === 'rejected' ? 'ไม่มีรายการที่ปฏิเสธ' : 'ไม่มีรายการที่คืนแล้ว'}
-            />
+          <div className="flex-1 flex items-center justify-center py-6">
+            <EmptyState icon={search ? 'bx-search' : 'bx-calendar'}
+              message={search ? `ไม่พบคำขอที่ตรงกับ "${search}"` : EMPTY_MESSAGES[activeFilter] || EMPTY_MESSAGES.all} />
           </div>
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เลขที่</th>
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ผู้ยืม</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">รถยนต์</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">วันที่</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">เหตุผล</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สถานะ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-light/40 dark:divide-border-dark/40">
+          <>
+            {/* Mobile list */}
+            <div className="sm:hidden divide-y divide-border-light/40 dark:divide-border-dark/40">
               {filteredBookings.map(b => (
-                <tr key={b.id} onClick={() => setDetailTarget(b)}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors cursor-pointer">
-                  <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                    {docLabel(b) || '-'}
-                  </td>
-                  <td className="p-3 sm:p-4">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{b.user_name}</span>
-                    <span className="text-xs text-gray-500 block">{b.user_email}</span>
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">{b.license_plate}</span>
-                    <span className="text-xs text-gray-500 block">{b.brand} {b.model}</span>
-                    {b.status === 'approved' && (
-                      <span className={`text-[10px] block mt-0.5 ${b.driver_name ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>
-                        {b.driver_name ? `ขับโดย: ${b.driver_name}` : 'ผู้ยืมขับเอง'}
-                      </span>
+                <div key={b.id} onClick={() => setDetailTarget(b)} role="button" tabIndex={0} aria-label={`เปิดคำขอของ ${b.user_name}`}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailTarget(b) } }}
+                  className="p-4 space-y-3 cursor-pointer active:bg-gray-50 dark:active:bg-gray-800/40">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-indigo-500 text-white text-sm font-bold flex items-center justify-center shrink-0">{nameInitial(b.user_name)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{b.user_name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{b.user_position || b.user_phone || '-'}</div>
+                    </div>
+                    <span className={signStatus(b).className + ' shrink-0'}>{signStatus(b).label}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-gray-600 dark:text-gray-400">
+                    <span className="inline-flex items-center gap-1.5 min-w-0"><i aria-hidden="true" className="bx bx-car text-sm text-gray-400"></i><span className="truncate"><b className="text-gray-800 dark:text-gray-200 font-semibold">{b.license_plate}</b> {b.brand} {b.model}</span></span>
+                    <span className="inline-flex items-center gap-1.5"><i aria-hidden="true" className="bx bx-calendar text-sm text-gray-400"></i>{formatThaiDate(b.start_date)}{b.end_date !== b.start_date && ` – ${formatThaiDate(b.end_date)}`}{timeRangeLabel(b) && ` · ${timeRangeLabel(b)}`}</span>
+                    {(b.destination_place || b.destination_province) && (
+                      <span className="col-span-2 inline-flex items-center gap-1.5 min-w-0"><i aria-hidden="true" className="bx bx-map text-sm text-gray-400"></i><span className="truncate">{[b.destination_place, b.destination_province].filter(Boolean).join(' · ')}</span></span>
                     )}
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{formatThaiDate(b.start_date)}</span>
-                    <span className="text-xs text-gray-400 block">→ {formatThaiDate(b.end_date)}</span>
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">{b.purpose || '-'}</span>
-                    {(b.destination_place || b.destination_district || b.destination_province) && (
-                      <span className="text-[10px] text-gray-400 block">{[b.destination_place, b.destination_district, b.destination_province].filter(Boolean).join(' · ')}</span>
-                    )}
-                    {b.attendees > 0 && <span className="text-[10px] text-gray-400 block">ผู้ไปราชการ {b.attendees} คน</span>}
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className={signStatus(b).className}>{signStatus(b).label}</span>
-                    {b.admin_notes && <span className="block text-[10px] text-gray-400 mt-0.5">{b.admin_notes}</span>}
-                  </td>
-                </tr>
+                    {b.purpose && <span className="col-span-2 inline-flex items-center gap-1.5 min-w-0"><i aria-hidden="true" className="bx bx-target-lock text-sm text-gray-400"></i><span className="truncate">{b.purpose}</span></span>}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-gray-400">
+                    <span>{b.doc_number ? `เลขที่ ${docLabel(b)}` : ''}</span>
+                    <span>{b.status === 'approved' ? (b.driver_name ? `ขับโดย ${b.driver_name}` : 'ผู้ยืมขับเอง') : ''}</span>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50/80 dark:bg-gray-800/50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 w-20 whitespace-nowrap">เลขที่</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">ผู้ยืม</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">รถยนต์</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">วันที่</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hidden xl:table-cell">วัตถุประสงค์</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-light/40 dark:divide-border-dark/40">
+                  {filteredBookings.map(b => {
+                    const days = dayCount(b.start_date, b.end_date)
+                    const dest = [b.destination_place, b.destination_province].filter(Boolean).join(' · ')
+                    return (
+                      <tr key={b.id} onClick={() => setDetailTarget(b)} tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailTarget(b) } }}
+                        className="hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors cursor-pointer">
+                        <td className="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap">{docLabel(b) || '-'}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-indigo-500 text-white text-sm font-bold flex items-center justify-center shrink-0">{nameInitial(b.user_name)}</div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-gray-900 dark:text-white truncate max-w-[220px]">{b.user_name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[220px]">{b.user_position || b.user_phone || '-'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">{b.license_plate}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{b.brand} {b.model}</div>
+                          {b.status === 'approved' && (
+                            <div className={`text-[11px] mt-0.5 ${b.driver_name ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>
+                              {b.driver_name ? `ขับโดย ${b.driver_name}` : 'ผู้ยืมขับเอง'}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-sm text-gray-700 dark:text-gray-300">{formatThaiDate(b.start_date)}</div>
+                          <div className="text-xs text-gray-400">{days > 1 ? `ถึง ${formatThaiDate(b.end_date)} · ${days} วัน` : '1 วัน'}{timeRangeLabel(b) && ` · ${timeRangeLabel(b)}`}</div>
+                        </td>
+                        <td className="px-4 py-3 hidden xl:table-cell max-w-xs">
+                          <div className="text-sm text-gray-700 dark:text-gray-300 truncate" title={b.purpose}>{b.purpose || '-'}</div>
+                          {dest && <div className="text-xs text-gray-400 truncate" title={dest}><i aria-hidden="true" className="bx bx-map align-[-2px] mr-0.5"></i>{dest}</div>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={signStatus(b).className + ' whitespace-nowrap'}>{signStatus(b).label}</span>
+                          {b.admin_notes && <div className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[160px]" title={b.admin_notes}>{b.admin_notes}</div>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -499,7 +476,7 @@ export default function BookingsManage() {
       {showRejectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowRejectModal(false)}>
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-          <div className="card p-6 w-full max-w-md relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
+          <div ref={rejectRef} {...dialogProps('ปฏิเสธคำขอยืม')} className="card p-6 w-full max-w-md relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
             <h3 className="font-heading font-semibold text-lg text-gray-900 dark:text-white mb-2">ปฏิเสธคำขอยืม</h3>
             <p className="text-sm text-gray-500 mb-4">ระบุเหตุผลในการปฏิเสธ</p>
             <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} className="input min-h-[100px]" placeholder="เหตุผลที่ปฏิเสธ..." />

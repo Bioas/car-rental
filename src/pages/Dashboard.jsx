@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { apiGet, invalidateApi } from '../lib/apiCache'
-import { signStatus, formatThaiDate } from '../lib/constants'
+import { signStatus, formatThaiDate, formatBookingRange, formatTime } from '../lib/constants'
 import { SkeletonStats, SkeletonPanel } from '../components/ui/skeleton'
 import SignProgress from '../components/SignProgress'
 import { Legend, MonthlyChart } from '../components/ReportCharts'
@@ -39,7 +39,7 @@ function relativeDay(ymd, today) {
   return `อีก ${diff} วัน`
 }
 
-function ScrollFade({ maxHeight, className, children }) {
+function ScrollFade({ maxHeight, className, label, children }) {
   const ref = useRef(null)
   const [maskStyle, setMaskStyle] = useState('')
 
@@ -83,7 +83,7 @@ function ScrollFade({ maxHeight, className, children }) {
   }
 
   return (
-    <div ref={ref} className={className} style={style}>
+    <div ref={ref} className={className} style={style} tabIndex={0} role="region" aria-label={label}>
       {children}
     </div>
   )
@@ -99,10 +99,10 @@ const TILE_TONES = {
 function Tile({ icon, tone, label, value, sub, to }) {
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${TILE_TONES[tone]}`}>
-          <i className={`bx ${icon} text-xl`}></i>
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 leading-snug">{label}</p>
+        <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${TILE_TONES[tone]}`}>
+          <i aria-hidden="true" className={`bx ${icon} text-xl`}></i>
         </div>
       </div>
       <p className="text-2xl sm:text-3xl font-bold font-heading text-gray-900 dark:text-white tabular-nums mt-1">{value}</p>
@@ -110,8 +110,8 @@ function Tile({ icon, tone, label, value, sub, to }) {
     </>
   )
   return to
-    ? <Link to={to} className="card-hover p-5 block min-w-0">{body}</Link>
-    : <div className="card p-5 min-w-0">{body}</div>
+    ? <Link to={to} className="card-hover p-4 sm:p-5 block min-w-0">{body}</Link>
+    : <div className="card p-4 sm:p-5 min-w-0">{body}</div>
 }
 
 function CardHeader({ title, badge, link, linkLabel = 'ดูทั้งหมด' }) {
@@ -123,7 +123,7 @@ function CardHeader({ title, badge, link, linkLabel = 'ดูทั้งหม�
           <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-500 text-white dark:bg-red-600">{badge}</span>
         )}
       </div>
-      {link && <Link to={link} className="text-xs text-brand-600 dark:text-brand-400 hover:underline shrink-0">{linkLabel}</Link>}
+      {link && <Link to={link} className="text-xs text-brand-600 dark:text-brand-400 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-2 -mx-2">{linkLabel}</Link>}
     </div>
   )
 }
@@ -235,7 +235,7 @@ export default function Dashboard() {
     const st = signStatus(b)
     return (
       <div key={b.id}
-        role="button" tabIndex={leaving ? -1 : 0} aria-label={`ดูเอกสารคำขอของ ${b.user_name}`}
+        role="button" tabIndex={leaving ? -1 : 0}
         onClick={() => !leaving && setDetailTarget(b)}
         onKeyDown={e => { if (!leaving && (e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); setDetailTarget(b) } }}
         className={`p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700/50 cursor-pointer hover:border-brand-200 dark:hover:border-brand-800 hover:bg-white dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 transition-colors ${leaving ? 'transition-all duration-300 opacity-0 scale-95 pointer-events-none' : 'motion-safe:animate-slide-up-fade'}`}
@@ -243,7 +243,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-100 dark:border-brand-800/60 flex items-center justify-center shrink-0">
-              <i className="bx bx-user text-sm text-brand-600 dark:text-brand-300"></i>
+              <i aria-hidden="true" className="bx bx-user text-sm text-brand-600 dark:text-brand-300"></i>
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{b.user_name}</p>
@@ -253,8 +253,8 @@ export default function Dashboard() {
           <span className={st.className + ' shrink-0'}>{st.label}</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <span className="flex items-center gap-1.5 min-w-0"><i className="bx bx-car text-sm shrink-0 text-brand-500 dark:text-brand-400"></i><span className="truncate">{b.license_plate} · {b.brand} {b.model}</span></span>
-          <span className="flex items-center gap-1.5 min-w-0"><i className="bx bx-calendar text-sm shrink-0"></i><span className="truncate">{formatThaiDate(b.start_date)} → {formatThaiDate(b.end_date)}</span></span>
+          <span className="flex items-center gap-1.5 min-w-0"><i aria-hidden="true" className="bx bx-car text-sm shrink-0 text-brand-500 dark:text-brand-400"></i><span className="truncate">{b.license_plate} · {b.brand} {b.model}</span></span>
+          <span className="flex items-center gap-1.5 min-w-0"><i aria-hidden="true" className="bx bx-calendar text-sm shrink-0"></i><span className="truncate">{formatBookingRange(b)}</span></span>
         </div>
         {b.doc_number && <SignProgress booking={b} />}
         {/* Staff sign their stage right here (an admin sees the list read-only).
@@ -269,7 +269,7 @@ export default function Dashboard() {
             )}
             <button type="button" onClick={e => { e.stopPropagation(); setSignTarget(b) }}
               className={`${b.sign_stage ? 'shrink-0' : 'flex-1'} h-9 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-sm shadow-brand-500/20 transition-colors`}>
-              <i className="bx bx-pen text-sm"></i> เซ็นเอกสาร
+              <i aria-hidden="true" className="bx bx-pen text-sm"></i> เซ็นเอกสาร
             </button>
           </div>
         )}
@@ -289,10 +289,10 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-2 shrink-0">
           <Link to="/app/bookings" className="h-10 px-4 inline-flex items-center gap-2 rounded-xl text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 shadow-md shadow-brand-500/20 transition-colors">
-            <i className="bx bxs-check-circle text-base"></i> คำขอจอง
+            <i aria-hidden="true" className="bx bxs-check-circle text-base"></i> คำขอจอง
           </Link>
           <Link to="/app/reports" className="h-10 px-4 inline-flex items-center gap-2 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-            <i className="bx bx-bar-chart-alt-2 text-base"></i> รายงาน
+            <i aria-hidden="true" className="bx bx-bar-chart-alt-2 text-base"></i> รายงาน
           </Link>
         </div>
       </div>
@@ -315,11 +315,11 @@ export default function Dashboard() {
           <CardHeader title="คำขอจอง" badge={requestCount} link="/app/bookings" />
           {requests.length === 0 && leavingBookings.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-8">
-              <i className="bx bxs-check-circle text-3xl opacity-40 mb-2 block"></i>
+              <i aria-hidden="true" className="bx bxs-check-circle text-3xl opacity-40 mb-2 block"></i>
               <p className="text-sm">{canManageBookings ? 'ไม่มีเอกสารรอคุณเซ็น' : 'ไม่มีคำขอที่รอดำเนินการ'}</p>
             </div>
           ) : (
-            <ScrollFade maxHeight="290px" className="space-y-2.5 scrollbar-none">
+            <ScrollFade maxHeight="290px" label="รายการคำขอ" className="space-y-2.5 scrollbar-none">
               {leavingBookings.map((b, i) => renderRequest(b, i, true))}
               {requests.map((b, i) => renderRequest(b, i))}
             </ScrollFade>
@@ -337,13 +337,13 @@ export default function Dashboard() {
           {fleet.length === 0 ? (
             <div className="py-8 text-center text-sm text-gray-400">ยังไม่มีรถในระบบ</div>
           ) : (
-            <ScrollFade maxHeight="290px" className="divide-y divide-gray-100 dark:divide-gray-700/50 scrollbar-none">
+            <ScrollFade maxHeight="290px" label="สถานะรถวันนี้" className="divide-y divide-gray-100 dark:divide-gray-700/50 scrollbar-none">
               {fleet.map(c => {
                 const st = FLEET_STATE[c.state]
                 return (
                   <div key={c.id} className="flex items-center gap-3 py-2.5 first:pt-0">
                     <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center shrink-0">
-                      <i className="bx bx-car text-lg text-brand-600 dark:text-brand-300"></i>
+                      <i aria-hidden="true" className="bx bx-car text-lg text-brand-600 dark:text-brand-300"></i>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.license_plate}</p>
@@ -353,7 +353,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     <span className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${st.className}`}>
-                      <i className={`bx ${st.icon} text-sm`}></i>{st.label}
+                      <i aria-hidden="true" className={`bx ${st.icon} text-sm`}></i>{st.label}
                     </span>
                   </div>
                 )
@@ -389,7 +389,7 @@ export default function Dashboard() {
                           )}
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {t.user_name}{t.destination ? ` → ${t.destination}` : ''}
+                          {t.start_time ? `${formatTime(t.start_time)} น. · ` : ''}{t.user_name}{t.destination ? ` → ${t.destination}` : ''}
                           {t.end_date !== t.start_date ? ` · ถึง ${formatThaiDate(t.end_date)}` : ''}
                           {t.driver ? ` · ผู้ขับ ${t.driver}` : ''}
                         </p>

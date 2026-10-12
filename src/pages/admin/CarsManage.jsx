@@ -1,10 +1,24 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import { apiGet, invalidateApi } from '../../lib/apiCache'
 import { statusLabel, badgeClass, CAR_TYPES } from '../../lib/constants'
 import { Toast } from '../../components/ui/toast'
 import { SkeletonHeader, SkeletonTable } from '../../components/ui/skeleton'
 import { Select } from '../../components/ui/select'
+import { StatTile, StatTileRow, SearchInput } from '../../components/ui/stat-tile'
+import { useDialog, dialogProps } from '../../lib/useDialog'
+
+// Summary tiles, each also a status filter.
+const STATUS_TILES = [
+  { key: 'all', label: 'รถทั้งหมด', icon: 'bx-car', tone: 'bg-brand-50 text-brand-600 dark:bg-brand-950/40 dark:text-brand-300', ring: 'ring-brand-400' },
+  { key: 'available', label: 'พร้อมใช้', icon: 'bx-check-circle', tone: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300', ring: 'ring-emerald-400' },
+  { key: 'maintenance', label: 'ซ่อมบำรุง', icon: 'bx-wrench', tone: 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300', ring: 'ring-amber-400' },
+  { key: 'retired', label: 'ปลดระวาง', icon: 'bx-archive', tone: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400', ring: 'ring-gray-400' },
+]
+
+function carInitials(car) {
+  return `${car.brand?.charAt(0) || ''}${car.model?.charAt(0) || ''}` || '?'
+}
 
 export default function CarsManage() {
   const { authHeaders } = useApp()
@@ -18,6 +32,22 @@ export default function CarsManage() {
   const [form, setForm] = useState({ license_plate: '', brand: '', model: '', type: '', color: '', year: '', seats: 5, status: 'available', notes: '' })
   const [openMenuId, setOpenMenuId] = useState(null)
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const counts = useMemo(() => {
+    const c = { all: cars.length }
+    for (const car of cars) c[car.status] = (c[car.status] || 0) + 1
+    return c
+  }, [cars])
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return cars.filter((car) => {
+      if (statusFilter !== 'all' && car.status !== statusFilter) return false
+      if (!q) return true
+      return [car.license_plate, car.brand, car.model, car.type, car.color].some((v) => String(v || '').toLowerCase().includes(q))
+    })
+  }, [cars, query, statusFilter])
 
   function handleMenuClick(e, id) {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -105,6 +135,9 @@ export default function CarsManage() {
     }
   }
 
+  const modalRef = useRef(null)
+  useDialog(showModal, () => setShowModal(false), modalRef)
+
   if (loading) {
     return (
       <div className="animate-fade-in flex flex-col flex-1 min-h-0">
@@ -116,146 +149,140 @@ export default function CarsManage() {
 
   return (
     <div className="animate-fade-in flex flex-col flex-1 min-h-0">
-      <div className="mb-6">
-        <div className="flex items-center justify-between gap-3">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white font-heading">จัดการรถยนต์</h2>
-          <button onClick={() => openModal()} className="btn-primary shrink-0">
-            <i className="bx bx-plus text-base"></i>
-            เพิ่มรถ
-          </button>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">เพิ่ม แก้ไข ลบข้อมูลยานพาหนะ</p>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">เพิ่ม แก้ไข ลบข้อมูลยานพาหนะ</p>
+        <button onClick={() => openModal()} className="btn-primary shrink-0">
+          <i aria-hidden="true" className="bx bx-plus text-base"></i>
+          เพิ่มรถ
+        </button>
       </div>
 
-      {/* Mobile Card View */}
-      <div className={`sm:hidden flex flex-col min-h-0 ${cars.length === 0 ? 'flex-1' : ''}`}>
-        <div className={`card p-4 divide-y divide-gray-200 dark:divide-gray-600 flex flex-col min-h-0 ${cars.length === 0 ? 'flex-1' : ''}`}>
-        {cars.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">ไม่มีรถยนต์ในระบบ</div>
-        ) : (
-          cars.map(car => (
-            <div key={car.id} className="bg-white dark:bg-card-dark py-3 first:pt-0 space-y-3">
-              {/* Header: Plate + Status */}
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="font-mono text-sm font-bold text-gray-900 dark:text-white">{car.license_plate}</span>
-                  <span className="text-sm text-gray-700 dark:text-gray-300 block mt-0.5">{car.brand} {car.model}</span>
-                </div>
-                <span className={badgeClass(car.status) + ' shrink-0'}>{statusLabel(car.status)}</span>
-              </div>
+      <StatTileRow className="mb-4 sm:mb-5">
+        {STATUS_TILES.map((t) => (
+          <StatTile key={t.key} icon={t.icon} label={t.label} value={counts[t.key] || 0} tone={t.tone} ring={t.ring}
+            active={statusFilter === t.key}
+            onClick={() => setStatusFilter(statusFilter === t.key ? 'all' : t.key)} />
+        ))}
+      </StatTileRow>
 
-              {/* Details */}
-              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
-                {car.type && (
-                  <div className="flex items-center gap-1">
-                    <i className="bx bx-category text-sm"></i>
-                    {car.type}
-                  </div>
-                )}
-                {car.color && (
-                  <div className="flex items-center gap-1">
-                    <i className="bx bx-palette text-sm"></i>
-                    {car.color}
-                  </div>
-                )}
-                {car.year && (
-                  <div className="flex items-center gap-1">
-                    <i className="bx bx-calendar text-sm"></i>
-                    {car.year}
-                  </div>
-                )}
-                <div className="flex items-center gap-1">
-                  <i className="bx bx-user text-sm"></i>
-                  {car.seats} ที่นั่ง
-                </div>
-              </div>
-
-              {car.notes && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/30 rounded-lg px-3 py-2">
-                  {car.notes}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => openModal(car)} className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-all">
-                  <i className="bx bx-edit text-sm"></i>
-                  แก้ไข
-                </button>
-                <button onClick={() => deleteCar(car.id)} className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all">
-                  <i className="bx bx-trash text-sm"></i>
-                  ลบ
-                </button>
-              </div>
-            </div>
-          ))
-        )}
+      <div className={`card overflow-hidden flex flex-col min-h-0 ${visible.length === 0 ? 'flex-1' : ''}`}>
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-border-light/60 dark:border-border-dark/60">
+          <SearchInput value={query} onChange={setQuery} placeholder="ค้นหาทะเบียน ยี่ห้อ รุ่น" className="flex-1 min-w-[200px] max-w-md" />
+          <span className="text-xs text-gray-400 ml-auto">
+            {visible.length === cars.length ? `ทั้งหมด ${cars.length} คัน` : `แสดง ${visible.length} จาก ${cars.length} คัน`}
+          </span>
+          {statusFilter !== 'all' && (
+            <button onClick={() => setStatusFilter('all')} className="text-xs text-brand-600 dark:text-brand-400 hover:underline min-h-[36px] px-2 -mx-2">ล้างตัวกรอง</button>
+          )}
         </div>
-      </div>
 
-      {/* Desktop Table View */}
-      <div className={`hidden sm:flex card overflow-hidden flex-col min-h-0 ${cars.length === 0 ? 'flex-1' : ''}`}>
-        {cars.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">ไม่มีรถยนต์ในระบบ</div>
+        {visible.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-2 py-16 text-gray-400 text-sm">
+            <i aria-hidden="true" className="bx bx-car text-4xl opacity-50"></i>
+            {cars.length === 0 ? 'ไม่มีรถยนต์ในระบบ' : 'ไม่พบรถที่ตรงกับการค้นหา'}
+          </div>
         ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50 dark:bg-gray-800/50">
-                <th className="text-left p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ทะเบียน</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ยี่ห้อ/รุ่น</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ประเภท</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สี</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ปี</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">ที่นั่ง</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">สถานะ</th>
-                <th className="text-center p-3 sm:p-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-light/40 dark:divide-border-dark/40">
-              {cars.map(car => (
-                <tr key={car.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td className="p-3 sm:p-4">
-                    <span className="font-mono text-sm font-medium text-gray-900 dark:text-white">{car.license_plate}</span>
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{car.brand} {car.model}</span>
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    {car.type
-                      ? <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">{car.type}</span>
-                      : <span className="text-sm text-gray-400">-</span>}
-                  </td>
-                  <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{car.color || '-'}</td>
-                  <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{car.year || '-'}</td>
-                  <td className="p-3 sm:p-4 text-sm text-gray-500 dark:text-gray-400 text-center">{car.seats}</td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <span className={badgeClass(car.status)}>{statusLabel(car.status)}</span>
-                  </td>
-                  <td className="p-3 sm:p-4 text-center">
-                    <button onClick={(e) => handleMenuClick(e, car.id)}
-                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 transition-colors">
-                      <i className="bx bx-dots-vertical-rounded text-xl"></i>
+          <>
+            {/* Mobile list */}
+            <div className="sm:hidden divide-y divide-border-light/40 dark:divide-border-dark/40">
+              {visible.map(car => (
+                <div key={car.id} className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 text-brand-700 dark:text-brand-300 text-sm font-bold flex items-center justify-center shrink-0">{carInitials(car)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-gray-900 dark:text-white">{car.license_plate}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{car.brand} {car.model}</div>
+                    </div>
+                    <span className={badgeClass(car.status) + ' shrink-0'}>{statusLabel(car.status)}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    {car.type && <span className="px-2 py-0.5 rounded-md bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">{car.type}</span>}
+                    <span className="px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">{car.seats} ที่นั่ง</span>
+                    {car.color && <span className="px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">สี{car.color}</span>}
+                    {car.year && <span className="px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-700/50">ปี {car.year}</span>}
+                  </div>
+                  {car.notes && <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/30 rounded-lg px-3 py-2">{car.notes}</div>}
+                  <div className="flex gap-2">
+                    <button onClick={() => openModal(car)} className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20 hover:bg-brand-100 dark:hover:bg-brand-900/40 transition-all">
+                      <i aria-hidden="true" className="bx bx-edit text-sm"></i>แก้ไข
                     </button>
-                    {openMenuId === car.id && (
-                      <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
-                        className="w-36 card p-1 shadow-xl border border-border-light dark:border-border-dark z-50 animate-scale-in">
-                        <button onClick={() => { setOpenMenuId(null); openModal(car); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors">
-                          <i className="bx bx-edit text-base"></i> แก้ไข
-                        </button>
-                        <button onClick={() => { setOpenMenuId(null); deleteCar(car.id); }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                          <i className="bx bx-trash text-base"></i> ลบ
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
+                    <button onClick={() => deleteCar(car.id)} className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all">
+                      <i aria-hidden="true" className="bx bx-trash text-sm"></i>ลบ
+                    </button>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border-light/50 dark:border-border-dark/50 bg-gray-50/80 dark:bg-gray-800/50">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">รถยนต์</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">ประเภท</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">รายละเอียด</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400">สถานะ</th>
+                    <th className="w-14 px-4 py-3"><span className="sr-only">จัดการ</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-light/40 dark:divide-border-dark/40">
+                  {visible.map(car => (
+                    <tr key={car.id} onDoubleClick={() => openModal(car)} className="group hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-100 to-brand-200 dark:from-brand-900/50 dark:to-brand-800/50 text-brand-700 dark:text-brand-300 text-sm font-bold flex items-center justify-center shrink-0">{carInitials(car)}</div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-gray-900 dark:text-white">{car.license_plate}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{car.brand} {car.model}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {car.type
+                          ? <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">{car.type}</span>
+                          : <span className="text-sm text-gray-400">-</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                          <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="bx bx-user text-sm"></i>{car.seats} ที่นั่ง</span>
+                          {car.color && <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="bx bx-palette text-sm"></i>{car.color}</span>}
+                          {car.year && <span className="inline-flex items-center gap-1"><i aria-hidden="true" className="bx bx-calendar text-sm"></i>{car.year}</span>}
+                        </div>
+                        {car.notes && <div className="text-[11px] text-gray-400 mt-0.5 truncate max-w-xs" title={car.notes}>{car.notes}</div>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={badgeClass(car.status)}>{statusLabel(car.status)}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={(e) => handleMenuClick(e, car.id)} aria-label={`จัดการ ${car.license_plate}`}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 transition-colors">
+                          <i aria-hidden="true" className="bx bx-dots-vertical-rounded text-xl"></i>
+                        </button>
+                        {openMenuId === car.id && (
+                          <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}
+                            className="w-36 card p-1 shadow-xl border border-border-light dark:border-border-dark z-50 animate-scale-in text-left">
+                            <button onClick={() => { setOpenMenuId(null); openModal(car); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                              <i aria-hidden="true" className="bx bx-edit text-base"></i> แก้ไข
+                            </button>
+                            <button onClick={() => { setOpenMenuId(null); deleteCar(car.id); }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                              <i aria-hidden="true" className="bx bx-trash text-base"></i> ลบ
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -264,7 +291,7 @@ export default function CarsManage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
+          <div ref={modalRef} {...dialogProps('ข้อมูลรถยนต์')} className="card p-6 w-full max-w-lg relative animate-scale-in max-h-[70vh] overflow-y-auto scrollbar-none sm:max-h-none sm:overflow-visible" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-light dark:border-border-dark">
               <div className="flex items-center gap-3">
@@ -274,8 +301,8 @@ export default function CarsManage() {
                     : 'bg-gradient-to-br from-emerald-400 to-emerald-600'
                 }`}>
                   {editing
-                    ? <i className="bx bx-edit text-xl"></i>
-                    : <i className="bx bx-car text-xl"></i>
+                    ? <i aria-hidden="true" className="bx bx-edit text-xl"></i>
+                    : <i aria-hidden="true" className="bx bx-car text-xl"></i>
                   }
                 </div>
                 <div>
@@ -287,9 +314,9 @@ export default function CarsManage() {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)}
+              <button onClick={() => setShowModal(false)} aria-label="ปิด"
                 className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-400 transition-colors">
-                <i className="bx bx-x text-xl"></i>
+                <i aria-hidden="true" className="bx bx-x text-xl"></i>
               </button>
             </div>
 
@@ -298,7 +325,7 @@ export default function CarsManage() {
               <div>
                 <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ทะเบียนรถ *</label>
                 <div className="relative">
-                  <i className="bx bx-id-card absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                  <i aria-hidden="true" className="bx bx-id-card absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                   <input value={form.license_plate} onChange={e => updateForm('license_plate', e.target.value)}
                     className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" required placeholder="กข 1234" />
                 </div>
@@ -309,7 +336,7 @@ export default function CarsManage() {
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ยี่ห้อ *</label>
                   <div className="relative">
-                    <i className="bx bx-car absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <i aria-hidden="true" className="bx bx-car absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                     <input value={form.brand} onChange={e => updateForm('brand', e.target.value)}
                       className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" required placeholder="Toyota" />
                   </div>
@@ -334,7 +361,7 @@ export default function CarsManage() {
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">สี</label>
                   <div className="relative">
-                    <i className="bx bx-palette absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <i aria-hidden="true" className="bx bx-palette absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                     <input value={form.color} onChange={e => updateForm('color', e.target.value)}
                       className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="ขาว" />
                   </div>
@@ -342,7 +369,7 @@ export default function CarsManage() {
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ปี</label>
                   <div className="relative">
-                    <i className="bx bx-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <i aria-hidden="true" className="bx bx-calendar absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                     <input value={form.year} onChange={e => updateForm('year', e.target.value)} type="number"
                       className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="2024" />
                   </div>
@@ -350,7 +377,7 @@ export default function CarsManage() {
                 <div>
                   <label className="block text-xs font-medium text-neutral-600 dark:text-gray-400 mb-1.5">ที่นั่ง</label>
                   <div className="relative">
-                    <i className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
+                    <i aria-hidden="true" className="bx bx-user absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-neutral-400"></i>
                     <input value={form.seats} onChange={e => updateForm('seats', e.target.value)} type="number"
                       className="w-full h-11 pl-10 pr-4 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 transition-all" placeholder="5" />
                   </div>
@@ -372,7 +399,7 @@ export default function CarsManage() {
                           ? s.activeClass
                           : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}>
-                      <i className={`bx ${s.icon} text-base`}></i>
+                      <i aria-hidden="true" className={`bx ${s.icon} text-base`}></i>
                       {s.label}
                     </button>
                   ))}
@@ -390,7 +417,7 @@ export default function CarsManage() {
               {/* Error */}
               {error && (
                 <div key={error} className="p-3 rounded-xl bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800/50 text-sm text-rose-700 dark:text-rose-300 flex items-center gap-2 animate-shake">
-                  <i className="bx bx-error-circle text-base shrink-0"></i>
+                  <i aria-hidden="true" className="bx bx-error-circle text-base shrink-0"></i>
                   {error}
                 </div>
               )}
@@ -399,11 +426,11 @@ export default function CarsManage() {
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={saving}
                   className="flex-1 h-11 inline-flex items-center justify-center gap-2 px-5 rounded-xl text-sm font-semibold text-white bg-gradient-to-br from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 active:from-brand-600 active:to-brand-700 shadow-md shadow-brand-200/50 hover:shadow-lg hover:shadow-brand-300/40 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving && <i className="bx bx-loader-alt text-base animate-spin"></i>}
+                  {saving && <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i>}
                   <span>{saving ? 'กำลังบันทึก...' : editing ? 'บันทึกการเปลี่ยนแปลง' : 'เพิ่มรถ'}</span>
                 </button>
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-400 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-neutral-300">
+                  className="h-11 px-5 inline-flex items-center justify-center rounded-xl text-sm font-medium text-neutral-600 dark:text-gray-200 bg-neutral-100 dark:bg-gray-700 hover:bg-neutral-200 dark:hover:bg-gray-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-neutral-300">
                   ยกเลิก
                 </button>
               </div>

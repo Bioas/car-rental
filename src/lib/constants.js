@@ -97,14 +97,14 @@ export function statusLabel(s) {
 }
 
 const BADGE_CLASSES = {
-  pending: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300',
-  approved: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
-  rejected: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 dark:bg-red-900/50 dark:text-red-300',
-  cancelled: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-  returned: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
-  booked: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-600 dark:bg-blue-900/50 dark:text-blue-300',
-  available: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
-  maintenance: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-600 dark:bg-amber-900/50 dark:text-amber-300',
+  pending: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
+  approved: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  rejected: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 dark:bg-red-900/50 dark:text-red-300',
+  cancelled: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+  returned: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  booked: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300',
+  available: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+  maintenance: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
   retired: 'inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-gray-50 text-gray-600 dark:bg-gray-900/50 dark:text-gray-300',
 }
 
@@ -221,4 +221,39 @@ export function formatThaiDate(dateStr) {
     if (Number.isNaN(d.getTime())) return String(dateStr)
   }
   return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// ─── Booking times ───
+// Bookings run from `start_date start_time` to `end_date end_time` (HH:MM,
+// picked by the hour). Bookings made before times existed have none and take
+// their days in full — every helper below falls back to dates only for them.
+export const BOOKING_HOURS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`)
+export const DEFAULT_START_TIME = '08:00'
+export const DEFAULT_END_TIME = '17:00'
+
+/** "08:00" → "08.00" (Thai clock style; add " น." where it ends a phrase). */
+export function formatTime(t) {
+  return t ? t.replace(':', '.') : ''
+}
+
+/** "08.00–17.00 น." for a booking with times, '' for a whole-day one. */
+export function timeRangeLabel(b) {
+  if (!b?.start_time || !b?.end_time) return ''
+  return `${formatTime(b.start_time)}–${formatTime(b.end_time)} น.`
+}
+
+/**
+ * Date + time range of a booking:
+ *   same day  → "12 ต.ค. 2569 · 08.00–17.00 น."
+ *   multi-day → "12 ต.ค. 2569 08.00 น. → 14 ต.ค. 2569 17.00 น."
+ *   no times  → "12 ต.ค. 2569 → 14 ต.ค. 2569" (or one date)
+ */
+export function formatBookingRange(b, fmt = formatThaiDate) {
+  if (!b) return '-'
+  const timed = b.start_time && b.end_time
+  if (b.start_date === b.end_date) {
+    return timed ? `${fmt(b.start_date)} · ${timeRangeLabel(b)}` : fmt(b.start_date)
+  }
+  if (!timed) return `${fmt(b.start_date)} → ${fmt(b.end_date)}`
+  return `${fmt(b.start_date)} ${formatTime(b.start_time)} น. → ${fmt(b.end_date)} ${formatTime(b.end_time)} น.`
 }

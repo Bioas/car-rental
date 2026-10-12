@@ -29,7 +29,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex">
+    <main className="min-h-screen flex">
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md animate-slide-up">
           <div className="text-center mb-10">
@@ -51,7 +51,7 @@ export default function Login() {
 
               <button type="submit" disabled={loading} className="btn-primary w-full">
                 {loading && (
-                  <i className="bx bx-loader-alt text-base animate-spin"></i>
+                  <i aria-hidden="true" className="bx bx-loader-alt text-base animate-spin"></i>
                 )}
                 <span>เข้าสู่ระบบ</span>
               </button>
@@ -75,6 +75,6 @@ export default function Login() {
           <p className="text-lg text-white/70">ระบบบริหารจัดการยานพาหนะสำหรับวิทยาลัยเทคนิคบุรีรัมย์</p>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

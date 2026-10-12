@@ -248,7 +248,7 @@ export default function CalendarDropdown({
       <div className="flex items-center justify-between mb-4">
         <button type="button" onClick={onPrev}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-500 dark:text-gray-400 transition-colors">
-          <i className="bx bx-chevron-left text-base"></i>
+          <i aria-hidden="true" className="bx bx-chevron-left text-base"></i>
         </button>
         {/* key={headerLabel} keeps the animation class re-firing on
             every step flip (e.g. `เลือกวันเริ่มต้น` → `เลือกวันคืนรถ`).
@@ -258,7 +258,7 @@ export default function CalendarDropdown({
         </div>
         <button type="button" onClick={onNext}
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-neutral-100 dark:hover:bg-gray-700 text-neutral-500 dark:text-gray-400 transition-colors">
-          <i className="bx bx-chevron-right text-base"></i>
+          <i aria-hidden="true" className="bx bx-chevron-right text-base"></i>
         </button>
       </div>
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
@@ -283,7 +283,7 @@ export default function CalendarDropdown({
       </div>
       {showDragHint && (
         <div className="hidden sm:block text-center text-[10px] text-neutral-400 dark:text-gray-500 mt-3 italic">
-          <i className="bx bx-cursor text-xs align-[-1px]"></i> ลากเมาส์เลือกช่วง หรือคลิกทีละวัน
+          <i aria-hidden="true" className="bx bx-cursor text-xs align-[-1px]"></i> ลากเมาส์เลือกช่วง หรือคลิกทีละวัน
         </div>
       )}
     </div>
