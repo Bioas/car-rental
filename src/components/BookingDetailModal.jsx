@@ -293,9 +293,14 @@ export default function BookingDetailModal({
   // modal offers it (PdfPreview then needs the borrower's phone) — the public
   // calendar's detail stays document-free.
   const showPdf = !!booking?.doc_number && (!publicMode || !!lookupQuery)
+  // The public return/cancel forms: whether each is open, and the phone typed
+  // into it (kept apart — the phone used to double as the "open" flag, so the
+  // form closed again on the first keystroke).
+  const [returnOpen, setReturnOpen] = useState(false)
   const [returnPhone, setReturnPhone] = useState('')
   const [returnLoading, setReturnLoading] = useState(false)
   const [returnFormExiting, setReturnFormExiting] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelPhone, setCancelPhone] = useState('')
   const [cancelLoading, setCancelLoading] = useState(false)
   const [cancelFormExiting, setCancelFormExiting] = useState(false)
@@ -319,6 +324,8 @@ export default function BookingDetailModal({
       }
     }
     document.body.style.overflow = ''
+    setReturnOpen(false)
+    setCancelOpen(false)
     setReturnPhone('')
     setReturnLoading(false)
     setReturnFormExiting(false)
@@ -558,18 +565,19 @@ export default function BookingDetailModal({
         </div>
 
         {/* Return phone confirmation form */}
-        {publicMode && booking.status === 'approved' && (returnPhone === 'show' || returnFormExiting) && (
+        {publicMode && booking.status === 'approved' && (returnOpen || returnFormExiting) && (
           <div className={`mx-5 mb-3 p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 motion-safe:${returnFormExiting ? 'animate-scale-out' : 'animate-scale-in'}`}>
             <label className="block text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
               <i aria-hidden="true" className="bx bx-lock-alt text-xs mr-1"></i>
               ยืนยันตัวตนด้วยเบอร์โทรศัพท์
             </label>
             <div className="flex gap-2">
-              <input value={returnPhone === 'show' ? '' : returnPhone} onChange={e => setReturnPhone(e.target.value)} type="tel"
+              <input value={returnPhone} onChange={e => setReturnPhone(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') publicReturn() }} type="tel" inputMode="tel" autoComplete="tel" autoFocus
+                aria-label="เบอร์โทรศัพท์ที่ใช้ตอนจอง"
                 className="flex-1 h-10 px-3 rounded-lg bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 text-sm text-neutral-800 dark:text-white placeholder:text-blue-300 dark:placeholder:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all"
                 placeholder="เบอร์โทรศัพท์ที่ใช้ตอนจอง"
                 disabled={returnLoading} />
-              <button onClick={publicReturn} disabled={returnLoading || returnPhone === 'show' || !returnPhone.trim()}
+              <button onClick={publicReturn} disabled={returnLoading || !returnPhone.trim()}
                 className="h-10 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm">
                 {returnLoading ? (
                   <i aria-hidden="true" className="bx bx-loader-alt text-sm animate-spin"></i>
@@ -583,18 +591,19 @@ export default function BookingDetailModal({
         )}
 
         {/* Cancel phone confirmation form */}
-        {publicMode && booking.status === 'pending' && (cancelPhone === 'show' || cancelFormExiting) && (
+        {publicMode && booking.status === 'pending' && (cancelOpen || cancelFormExiting) && (
           <div className={`mx-5 mb-3 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/40 motion-safe:${cancelFormExiting ? 'animate-scale-out' : 'animate-scale-in'}`}>
             <label className="block text-xs font-medium text-rose-700 dark:text-rose-300 mb-2">
               <i aria-hidden="true" className="bx bx-lock-alt text-xs mr-1"></i>
               ยืนยันตัวตนด้วยเบอร์โทรศัพท์
             </label>
             <div className="flex gap-2">
-              <input value={cancelPhone === 'show' ? '' : cancelPhone} onChange={e => setCancelPhone(e.target.value)} type="tel"
+              <input value={cancelPhone} onChange={e => setCancelPhone(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') publicCancel() }} type="tel" inputMode="tel" autoComplete="tel" autoFocus
+                aria-label="เบอร์โทรศัพท์ที่ใช้ตอนจอง"
                 className="flex-1 h-10 px-3 rounded-lg bg-white dark:bg-gray-800 border border-rose-200 dark:border-rose-800 text-sm text-neutral-800 dark:text-white placeholder:text-rose-300 dark:placeholder:text-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-300 transition-all"
                 placeholder="เบอร์โทรศัพท์ที่ใช้ตอนจอง"
                 disabled={cancelLoading} />
-              <button onClick={publicCancel} disabled={cancelLoading || cancelPhone === 'show' || !cancelPhone.trim()}
+              <button onClick={publicCancel} disabled={cancelLoading || !cancelPhone.trim()}
                 className="h-10 px-4 inline-flex items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 shadow-sm">
                 {cancelLoading ? (
                   <i aria-hidden="true" className="bx bx-loader-alt text-sm animate-spin"></i>
@@ -649,8 +658,8 @@ export default function BookingDetailModal({
             </button>
           ) : publicMode && booking.status === 'approved' ? (
             <div>
-              {returnPhone !== 'show' ? (
-                <button onClick={() => setReturnPhone('show')}
+              {!returnOpen ? (
+                <button onClick={() => setReturnOpen(true)}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 active:from-blue-700 active:to-blue-600 shadow-md shadow-blue-200/50 hover:shadow-lg transition-all">
                   <i aria-hidden="true" className="bx bx-refresh text-sm"></i>
                   คืนรถ
@@ -659,6 +668,7 @@ export default function BookingDetailModal({
                 <button onClick={() => {
                   setReturnFormExiting(true)
                   returnExitTimer.current = setTimeout(() => {
+                    setReturnOpen(false)
                     setReturnPhone('')
                     setReturnLoading(false)
                     setReturnFormExiting(false)
@@ -672,8 +682,8 @@ export default function BookingDetailModal({
             </div>
           ) : publicMode && booking.status === 'pending' ? (
             <div>
-              {cancelPhone !== 'show' ? (
-                <button onClick={() => setCancelPhone('show')}
+              {!cancelOpen ? (
+                <button onClick={() => setCancelOpen(true)}
                   className="w-full h-10 inline-flex items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 active:from-rose-700 active:to-rose-600 shadow-md shadow-rose-200/50 hover:shadow-lg transition-all">
                   <i aria-hidden="true" className="bx bx-x-circle text-sm"></i>
                   ยกเลิกการจอง
@@ -682,6 +692,7 @@ export default function BookingDetailModal({
                 <button onClick={() => {
                   setCancelFormExiting(true)
                   cancelExitTimer.current = setTimeout(() => {
+                    setCancelOpen(false)
                     setCancelPhone('')
                     setCancelLoading(false)
                     setCancelFormExiting(false)
